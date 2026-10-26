@@ -1,0 +1,5 @@
+node_modules/
+# Kunci bawaan & versi offline jangan masuk repo publik
+source/kunci_default.js
+Penilaian_Ujian_Praktik_Offline.html
+*.xlsx

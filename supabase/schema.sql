@@ -1,0 +1,8 @@
+-- Skema Supabase "Penilaian Ujian Praktik" (sudah diterapkan di project akarxmsrsvyroovzqgcw).
+-- penilai: email yang boleh membuka data (peran admin/penilai)
+-- kunci: kunci jawaban per angkatan (dari sheet MasterPraktik…_TerampilMahirPA) + unsur uraian + notes
+-- preset_unsur: unsur uraian yang sudah direview tim (dicocokkan lewat KK + kata penanda)
+-- peserta: isi file jawaban yang sudah dibaca (JSON), per kunci × jabatan × file
+-- fisik: penilaian fisik R/S/T per peserta
+-- Semua tabel memakai RLS: hanya email terdaftar di penilai yang bisa membaca; kunci & tim hanya diubah admin.
+-- Fungsi: email_saya(), is_penilai(), is_admin(), aktifkan_kunci(id). Realtime aktif untuk peserta, fisik, kunci.
