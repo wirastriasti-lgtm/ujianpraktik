@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Penilaian Ujian Praktik</title>
+<link rel="icon" type="image/png" href="/*FAVICON*/">
 <style>
 /*FONTS*/
 :root{
@@ -27,6 +28,7 @@ input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink)}
 .top{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--line);display:flex;align-items:stretch;gap:24px;padding:0 24px;min-height:68px}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
 .mark{width:38px;height:38px;border-radius:10px;background:var(--navy);display:grid;place-items:center;flex:none}
+.logo{height:46px;width:auto;flex:none;display:block}
 .brand b{display:block;font-size:15px;font-weight:600;letter-spacing:-.005em;white-space:nowrap}
 .brand span{display:block;font-size:13px;color:var(--muted);white-space:nowrap}
 .jnav{display:flex;gap:4px;margin:0 auto;align-self:stretch}
@@ -121,6 +123,19 @@ td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
 .sc.s20{background:var(--red-bg);color:var(--red)}
 .why{font-size:11.5px;color:var(--muted);margin-top:2px;max-width:170px}
 .ans{font-size:11.5px;color:var(--ink2);margin-top:2px;max-width:170px;font-style:italic}
+/* rincian per berkas: sel nilai rata kiri, teks membungkus, jawaban dipotong 3 baris */
+.dt th.k{text-align:left;min-width:150px}
+.dt td.cell{min-width:150px;max-width:220px;white-space:normal;text-align:left}
+.dt td.cell .sc{text-align:left;min-width:0}
+.dt td.cell .why,.dt td.cell .ans{max-width:none;overflow-wrap:anywhere}
+.dt td.cell .ans{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;padding-left:7px;border-left:2px solid var(--line);margin-top:6px}
+.dt td.cell.mid{background:#fffcf3}.dt td.cell.low{background:#fff8f7}
+.dt th:nth-child(1),.dt td:nth-child(1){position:sticky;left:0;z-index:1;background:var(--surface);min-width:170px;max-width:200px;white-space:normal}
+.dt th:nth-child(2),.dt td:nth-child(2){position:sticky;left:170px;z-index:1;background:var(--surface);min-width:120px;box-shadow:inset -1px 0 0 var(--line)}
+.dt thead th:nth-child(1),.dt thead th:nth-child(2){z-index:3;background:#f8f9fa}
+.dt tbody tr:hover td:nth-child(1),.dt tbody tr:hover td:nth-child(2){background:#fafbfc}
+.dt td.ura{min-width:260px;max-width:340px;white-space:normal}
+.dt tr.grp td{border-top:2px solid var(--line)}
 
 /* empty state */
 .empty{text-align:center;padding:48px 20px;color:var(--muted)}
@@ -206,7 +221,7 @@ input[type=file]{display:none}
 <body>
 <header class="top">
   <div class="brand">
-    <div class="mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></svg></div>
+    <img class="logo" src="/*LOGO*/" alt="ANRI">
     <div><b>Direktorat SDM Kearsipan dan Sertifikasi</b><span>Penilaian Ujian Praktik Sertifikasi</span></div>
   </div>
   <nav class="jnav" id="jnav" aria-label="Jabatan"></nav>

@@ -183,10 +183,10 @@ function vDetail(v,hasil,JA){
     <div class="search">${ICON_SEARCH}<input id="dq" placeholder="Cari nama peserta…" value="${esc(UI.dq)}"></div>
     <div class="field"><label>Tampilkan</label><select id="donly"><option value="0">Semua berkas</option><option value="1" ${UI.donly?"selected":""}>Hanya yang perlu dicek</option></select></div>
   </div>
-  <div class="tw"><table><thead><tr><th>Peserta</th><th>Berkas</th>${JA.cols.map(c=>`<th class="n">${c}<div class="sub">${KOMP[c]}</div></th>`).join("")}<th class="n">Nilai DA</th><th>Uraian jawaban</th></tr></thead><tbody>
-  ${lim.map(({h,b})=>`<tr><td><b>${esc(h.nama)}</b></td><td><b>${b.no} · ${esc(b.kkKunci)}</b><div class="sub">${esc(b.jaw.kk||"–")} · ${esc(b.cara)}</div></td>
-    ${JA.cols.map(c=>`<td class="n" title="${esc(b.D[c])}"><span class="sc ${cls(b.S[c])}">${fmt(b.S[c])}</span><div class="why">${esc(b.D[c])}</div>${JAWAB[c]&&b.jaw[JAWAB[c]]?`<div class="ans">“${esc(String(b.jaw[JAWAB[c]]).slice(0,50))}”</div>`:""}</td>`).join("")}
-    <td class="n big">${fmt(b.da)}</td><td style="min-width:240px">${esc(b.jaw.uraian)}${b.kurang&&b.kurang.length?`<div class="why" style="max-width:none">kurang: ${esc(b.kurang.join(", "))}</div>`:""}</td></tr>`).join("")}
+  <div class="tw"><table class="dt"><thead><tr><th>Peserta</th><th>Berkas</th>${JA.cols.map(c=>`<th class="k">${c}<div class="sub">${KOMP[c]}</div></th>`).join("")}<th class="n">Nilai DA</th><th>Uraian jawaban</th></tr></thead><tbody>
+  ${lim.map(({h,b},i)=>{const baru=i===0||lim[i-1].h!==h;return`<tr class="${baru&&i?"grp":""}"><td>${baru?`<b>${esc(h.nama)}</b>`:`<span class="sub">${esc(h.nama)}</span>`}</td><td><b>${b.no} · ${esc(b.kkKunci)}</b><div class="sub">${esc(b.jaw.kk||"–")} · ${esc(b.cara)}</div></td>
+    ${JA.cols.map(c=>{const v=b.S[c],jw=JAWAB[c]?String(b.jaw[JAWAB[c]]||""):"";return`<td class="cell ${v!==null&&v<=20?"low":v!==null&&v<100?"mid":""}"><span class="sc ${cls(v)}">${fmt(v)}</span><div class="why">${esc(b.D[c])}</div>${jw?`<div class="ans" title="${esc(jw)}">“${esc(jw)}”</div>`:""}</td>`}).join("")}
+    <td class="n big">${fmt(b.da)}</td><td class="ura">${esc(b.jaw.uraian)}${b.kurang&&b.kurang.length?`<div class="why" style="max-width:none">kurang: ${esc(b.kurang.join(", "))}</div>`:""}</td></tr>`}).join("")}
   </tbody></table>${rows.length?"":`<div class="empty">Tidak ada berkas yang cocok.</div>`}</div>
   <div class="sub" style="margin-top:10px">${rows.length} baris${rows.length>400?" · menampilkan 400 pertama, persempit dengan pencarian":""}</div></div>`;
   const qi=$("dq");qi.oninput=()=>{UI.dq=qi.value;const p=qi.selectionStart;render();const n=$("dq");n.focus();n.setSelectionRange(p,p)};

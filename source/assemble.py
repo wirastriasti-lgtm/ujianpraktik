@@ -17,6 +17,8 @@ fonts = "\n".join([ff("Newsreader", "newsreader/files/newsreader-latin-500-norma
                    ff("Inter", "inter/files/inter-latin-700-normal.woff2", 700, "normal")])
 rd = lambda p: open(p, encoding="utf-8").read()
 shell = rd(B + "/shell.html").replace("/*FONTS*/", fonts)
+uri = lambda p: "data:image/png;base64," + base64.b64encode(open(B + "/" + p, "rb").read()).decode()
+shell = shell.replace("/*LOGO*/", uri("logo_anri.png")).replace("/*FAVICON*/", uri("favicon_anri.png"))
 if ".faint{" not in shell: shell = shell.replace(".toast{", ".faint{color:var(--faint)}\n.toast{")
 rules = rd(B + "/rules.js")
 i = rules.index(' "<b>Fisik berkas</b>'); j = rules.index('\n', i)
