@@ -3,3 +3,4 @@ node_modules/
 source/kunci_default.js
 Penilaian_Ujian_Praktik_Offline.html
 *.xlsx
+!source/Template_Kunci_Jawaban.xlsx

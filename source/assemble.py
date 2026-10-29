@@ -26,6 +26,7 @@ rules = rules[:i] + ' "<b>Fisik berkas</b> (notes + praktik penilai, diisi di me
 esc = lambda t: t.replace("</script>", "<\\/script>")
 xlsx = esc(rd(NM + "xlsx/dist/xlsx.full.min.js"))
 logic, ui = rd(B + "/logic.js"), rd(B + "/ui.js")
+ui = ui.replace('"/*TEMPLATE*/"', '"' + base64.b64encode(open(B + "/Template_Kunci_Jawaban.xlsx", "rb").read()).decode() + '"')
 
 if os.path.exists(B + "/kunci_default.js"):
   off = "<script>" + xlsx + "</script>\n<script>\n" + rd(B + "/kunci_default.js") + "\n" + logic + "\n" + rules + "\n" + ui + "\n</script>"

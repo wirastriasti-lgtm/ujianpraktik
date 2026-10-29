@@ -97,12 +97,10 @@ const ONL={
   },
   async gantiKunci(id){this.kunciId=id;try{localStorage.setItem("kunciDipilih",String(id))}catch(e){}
     semua=[];FISIK={};FSEL=null;await this.pakaiKunci();await this.muatData();this.dengar();toast("Kunci aktif: "+KUNCI_SRC)},
-  async simpanKunciBaru(m,fname){
+  async simpanKunciBaru(m,fname,angkatan){
     if(!this.admin){toast("Hanya admin yang bisa mengunggah kunci.");return}
-    const a=String(fname).match(/angkatan[_\s-]*([ivxlc]+|\d+)/i);
-    let angkatan=a?"Angkatan "+a[1].toUpperCase():"";
-    angkatan=window.prompt("Nama angkatan untuk kunci ini:",angkatan||"Angkatan ");if(!angkatan)return;
-    const berkas={};Object.keys(m.jab).forEach(j=>{const x=m.jab[j];berkas[j]={...x,k:x.k.map(k=>({...k,unsurSimpan:unsurBawaan(k)}))}});
+    if(!angkatan)return;
+    const berkas={};Object.keys(m.jab).forEach(j=>{const{cacat,sheetKosong,...x}=m.jab[j];berkas[j]={...x,k:x.k.map(k=>({...k,unsurSimpan:k.unsurSimpan||unsurBawaan(k)}))}});
     const sheets=[...new Set(Object.values(m.jab).map(x=>x.sheet))].join(", ");
     const{data,error}=await this.sb.from("kunci").insert({angkatan:angkatan.trim(),sumber:fname,sheet:sheets,berkas,notes:[],aktif:false,updated_by:this.email}).select("id").single();
     if(error){toast("Gagal menyimpan kunci: "+error.message);return}

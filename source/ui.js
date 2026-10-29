@@ -50,35 +50,104 @@ async function muat(list){
 var KUNCI_SHEET="",KUNCI_NOTES=[];
 function sinkronJabatan(){KUNCI=kunciJab(JAKTIF);const m=KJ_META[JAKTIF]||{};KUNCI_SHEET=m.sheet||"";KUNCI_NOTES=m.notes||[]}
 function bacaSheetKunci(ws){
-  const g=grid(ws),k=[];
-  for(let r=4;r<g.length;r++){const no=Number(g[r][0]);if(no&&String(g[r][1]).trim()&&String(g[r][3]).trim()&&!k.some(x=>x.no===no))k.push({no,kk:String(g[r][1]).trim(),indeks:String(g[r][2]).trim(),uraian:String(g[r][3]).replace(/\s+/g," ").trim(),kurun:String(g[r][4]).trim(),jumlah:String(g[r][5]).trim(),skka:String(g[r][6]).trim(),aktif:String(g[r][7]).replace(/\s+/g," ").trim(),inaktif:String(g[r][8]).trim(),nasib:String(g[r][9]).replace(/\s+/g," ").trim(),pindah:String(g[r][10]).trim(),musnah:String(g[r][11]).trim(),serah:String(g[r][12]).trim(),itemKunci:String(g[r][13]||"").trim(),baris:r+1})}
+  const g=grid(ws),k=[],cacat=[];
+  const s=(r,c)=>String((g[r]||[])[c]??"").trim();
+  for(let r=4;r<g.length;r++){
+    const no=Number(s(r,0)),adaIsi=[1,2,3,4,5,6,7,8,9].some(c=>s(r,c));
+    if(!no){continue}
+    if(!s(r,1)||!s(r,3)){if(adaIsi)cacat.push({baris:r+1,no,msg:"baris "+(r+1)+": "+(!s(r,1)?"kode klasifikasi (B)":"uraian (D)")+" kosong, berkas ini dilewati"});continue}
+    if(k.some(x=>x.no===no)){cacat.push({baris:r+1,no,msg:"baris "+(r+1)+": nomor berkas "+no+" dobel"});continue}
+    const o={no,kk:s(r,1),indeks:s(r,2),uraian:s(r,3).replace(/\s+/g," "),kurun:s(r,4),jumlah:s(r,5),skka:s(r,6),aktif:s(r,7).replace(/\s+/g," "),inaktif:s(r,8).replace(/\s+/g," "),nasib:s(r,9).replace(/\s+/g," "),pindah:s(r,10),musnah:s(r,11),serah:s(r,12),itemKunci:s(r,13),baris:r+1};
+    const uO=s(r,14),uP=s(r,15);if(uO){o.unsurSimpan="kegiatan: "+uO.replace(/\n+/g," | ")+(uP?"\nsubjek: "+uP.replace(/\n+/g," | "):"");o.unsurTemplate=true}
+    k.push(o);
+  }
   const notes=[];
   Object.keys(ws).filter(a=>a[0]!=="!"&&ws[a]&&ws[a].c&&ws[a].c.length).forEach(a=>{const d=XLSX.utils.decode_cell(a);let judul="";for(let r=Math.min(d.r,6);r>=0;r--){const v=g[r]&&String(g[r][d.c]||"").trim();if(v){judul=v;break}}
     notes.push({sel:a,kol:XLSX.utils.encode_col(d.c),judul,teks:ws[a].c.map(x=>String(x.t||"").replace(/^[^:\n]{1,40}:\s*\n/,"").trim()).join("\n")})});
   notes.sort((x,y)=>XLSX.utils.decode_cell(x.sel).c-XLSX.utils.decode_cell(y.sel).c||XLSX.utils.decode_cell(x.sel).r-XLSX.utils.decode_cell(y.sel).r);
-  return{k,notes};
+  return{k,notes,cacat};
 }
-// Baca kunci tiap jabatan dari sheet masing-masing → {jab:{terampil:{k,sheet,notes,pinjam},…}, warn:[…]}
+// Baca kunci tiap jabatan dari sheet masing-masing → {jab:{terampil:{k,sheet,notes,pinjam,cacat},…}, warn:[…]}
 function bacaKunciMaster(wb){
   const names=wb.SheetNames;
-  if(!names.some(n=>/^MasterPraktik/i.test(n)))throw new Error("file ini bukan master kunci (tidak ada sheet MasterPraktik…). Kemungkinan ini file jawaban peserta — muat lewat tombol Muat jawaban.");
+  if(!names.some(n=>/^MasterPraktik/i.test(n)))throw new Error("file ini bukan master/template kunci (tidak ada sheet MasterPraktik…). Kemungkinan ini file jawaban peserta. Unduh template kunci bila perlu.");
   const cari=j=>{for(const re of JAB_SHEET[j].re){const n=names.find(x=>/^MasterPraktik/i.test(x)&&re.test(x))||names.find(x=>/praktik/i.test(x)&&re.test(x));if(n)return n}return null};
-  const jab={},warn=[];
-  Object.keys(JAB_SHEET).forEach(j=>{const sn=cari(j);if(!sn)return;const r=bacaSheetKunci(wb.Sheets[sn]);if(r.k.length)jab[j]={k:r.k,sheet:sn,notes:r.notes};else warn.push("Sheet "+sn+" tidak berisi baris kunci")});
-  if(!Object.keys(jab).length)throw new Error("baris kunci tidak ditemukan di sheet MasterPraktik mana pun");
+  const jab={},kosong=[];
+  Object.keys(JAB_SHEET).forEach(j=>{const sn=cari(j);if(!sn)return;const r=bacaSheetKunci(wb.Sheets[sn]);if(r.k.length)jab[j]={k:r.k,sheet:sn,notes:r.notes,cacat:r.cacat};else kosong.push({j,sn,cacat:r.cacat})});
+  if(!Object.keys(jab).length)throw new Error("tidak ada berkas kunci yang terisi (kode klasifikasi + uraian) di sheet MasterPraktik mana pun");
   const cad=jab.terampil||jab.penyelia||jab.muda;
-  Object.keys(JAB_SHEET).forEach(j=>{if(!jab[j]){jab[j]={k:JSON.parse(JSON.stringify(cad.k)),sheet:cad.sheet,notes:cad.notes,pinjam:true};warn.push("Sheet "+JAB_SHEET[j].label+" tidak ada — "+JAB[j].label+" sementara memakai kunci "+cad.sheet)}});
-  Object.keys(jab).forEach(j=>jab[j].k.filter(x=>!pasangJumlah(x.jumlah).length).forEach(x=>warn.push(JAB[j].label+" berkas "+x.no+": parameter jumlah \""+x.jumlah+"\" tidak terbaca")));
-  return{jab,warn};
+  Object.keys(JAB_SHEET).forEach(j=>{if(!jab[j]){const ks=kosong.find(x=>x.j===j);jab[j]={k:JSON.parse(JSON.stringify(cad.k)),sheet:cad.sheet,notes:cad.notes,pinjam:true,cacat:ks?ks.cacat:[],sheetKosong:ks?ks.sn:null}}});
+  return{jab,warn:[]};
 }
+// Validasi isi kunci per jabatan. error = kunci ditolak; peringatan = boleh dipakai setelah dicek.
+const YA_RE=/^(ya|y|v|√|✓|x|1|true)$/i,TIDAK_RE=/^(tidak|t|n|no|-|0|false)$/i;
+function validasiKunci(m){
+  const out={};
+  Object.keys(JAB_SHEET).forEach(j=>{
+    const x=m.jab[j],E=[],W=[];out[j]={E,W};
+    (x.cacat||[]).forEach(c=>E.push(c.msg));
+    if(x.pinjam){W.push(x.sheetKosong?"Sheet "+x.sheetKosong+" kosong":"Sheet "+JAB_SHEET[j].label+" tidak ada");W.push("Sementara memakai kunci dari "+x.sheet+". Isi sheet jabatan ini bila kuncinya berbeda.");return}
+    if(x.k.length!==4)W.push("Berisi "+x.k.length+" berkas (biasanya 4). Nilai DA dibagi "+x.k.length+".");
+    const kkSeen={};
+    x.k.forEach(k=>{
+      const t="Berkas "+k.no+" ("+(k.kk||"–")+"): ",kk=normKK(k.kk);
+      if(!/^[A-Z]{2}(\.\d{2}){1,3}$/.test(kk))E.push(t+"kode klasifikasi \""+k.kk+"\" tidak berformat XX.00.00");
+      if(kkSeen[kk])E.push(t+"kode klasifikasi sama dengan berkas "+kkSeen[kk]+" — berkas peserta dicocokkan lewat kode ini");kkSeen[kk]=k.no;
+      if(k.uraian.length<12)W.push(t+"uraian sangat pendek (\""+k.uraian+"\")");
+      if(!k.indeks&&!k.unsurSimpan)W.push(t+"indeks kosong — unsur uraian disusun dari uraian, cek di menu Kunci & rules");
+      if(!/\d{4}/.test(k.kurun))W.push(t+"kurun waktu \""+(k.kurun||"kosong")+"\" tidak memuat tahun (dipakai untuk usul)");
+      if(!pasangJumlah(k.jumlah).length)E.push(t+"jumlah \""+(k.jumlah||"kosong")+"\" tidak terbaca. Contoh: 3 item/1 Folder/1 Berkas");
+      else if(!/\d+\s*item/i.test(k.jumlah))W.push(t+"jumlah tidak memuat 'item' — penilaian fisik T memakai 3 item");
+      if(!tingkatSKKA(k.skka))E.push(t+"SKKA \""+(k.skka||"kosong")+"\" tidak dikenali (Biasa/Terbuka, Terbatas, Rahasia, Sangat Rahasia)");
+      if(j!=="terampil"){
+        if(!jangka(k.aktif))E.push(t+"retensi aktif \""+(k.aktif||"kosong")+"\" tidak memuat angka + tahun/bulan");
+        if(!jangka(k.inaktif))E.push(t+"retensi inaktif \""+(k.inaktif||"kosong")+"\" tidak memuat angka + tahun/bulan");
+        if(!jenisNasib(k.nasib))E.push(t+"nasib akhir \""+(k.nasib||"kosong")+"\" tidak dikenali (Musnah / Permanen / Dinilai kembali)");
+      }
+      if(j==="muda")["pindah","musnah","serah"].forEach(u=>{const v=String(k[u]||"").trim();if(v&&!YA_RE.test(v)&&!TIDAK_RE.test(v))E.push(t+"usul "+u+" \""+v+"\" harus Ya/Tidak atau kosong")});
+      if(k.unsurTemplate&&!parseUnsur(k.unsurSimpan).length)E.push(t+"unsur uraian (kolom O) tidak terbaca");
+    });
+  });
+  return out;
+}
+// Dialog pratinjau + hasil validasi sebelum kunci dipakai
+function dialogKunci(m,fname){
+  return new Promise(res=>{
+    const V=validasiKunci(m),nE=Object.values(V).reduce((a,v)=>a+v.E.length,0),nW=Object.values(V).reduce((a,v)=>a+v.W.length,0);
+    const a=String(fname).match(/angkatan[_\s-]*([ivxlc]+|\d+)/i);
+    const el=document.createElement("div");el.className="modal";
+    el.innerHTML=`<div class="mbox" role="dialog" aria-modal="true"><div class="eyebrow">Periksa kunci jawaban</div>
+      <h2>${nE?`Kunci <em>belum valid</em>.`:`Kunci <em>siap dipakai</em>.`}</h2>
+      <p class="sub" style="font-size:13.5px;margin:0 0 14px">${esc(fname)} · ${nE?`<b style="color:var(--red)">${nE} kesalahan</b> harus diperbaiki di Excel lalu unggah ulang`:"tidak ada kesalahan format"}${nW?` · <b style="color:var(--amber)">${nW} peringatan</b> perlu dicek`:""}</p>
+      ${window.ONLINE&&!nE?`<label class="mfield">Nama angkatan<input id="mAng" value="${esc(a?"Angkatan "+a[1].toUpperCase():"")}" placeholder="mis. Angkatan XI"></label>`:""}
+      <div class="mjab">${Object.keys(JAB_SHEET).map(j=>{const x=m.jab[j],v=V[j];return`<div class="mj ${v.E.length?"bad":v.W.length?"warn":"ok"}">
+        <div class="mjh"><b>${esc(JAB[j].label)}</b><span class="pill ${v.E.length?"bad":v.W.length?"warn":"ok"}">${v.E.length?v.E.length+" kesalahan":v.W.length?v.W.length+" peringatan":"valid"}</span></div>
+        <div class="sub">sheet ${esc(x.pinjam?(x.sheetKosong||JAB_SHEET[j].label+" (tidak ada)"):x.sheet)}</div>
+        ${x.pinjam?"":`<table class="mt"><tbody>${x.k.map(k=>`<tr><td><b>${k.no}</b></td><td><b>${esc(k.kk)}</b></td><td>${esc(k.uraian)}</td><td>${esc(k.jumlah)}</td><td>${esc(k.skka)}</td>${j!=="terampil"?`<td>${esc(k.aktif)} / ${esc(k.inaktif)}</td><td>${esc(k.nasib)}</td>`:""}</tr>`).join("")}</tbody></table>`}
+        ${v.E.length?`<ul class="ml bad">${v.E.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}
+        ${v.W.length?`<ul class="ml warn">${v.W.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}</div>`}).join("")}</div>
+      <div class="mbar"><button class="btn ghost" data-t="tpl">Unduh template kunci</button><span style="flex:1"></span><button class="btn" data-t="batal">${nE?"Tutup":"Batal"}</button>${nE?"":`<button class="btn pri" data-t="ok">Pakai kunci ini</button>`}</div></div>`;
+    document.body.appendChild(el);
+    const tutup=v=>{el.remove();document.removeEventListener("keydown",esc_);res(v)};
+    const esc_=e=>{if(e.key==="Escape")tutup(null)};document.addEventListener("keydown",esc_);
+    el.querySelector("[data-t=tpl]").onclick=unduhTemplate;
+    el.querySelector("[data-t=batal]").onclick=()=>tutup(null);
+    const ok=el.querySelector("[data-t=ok]");if(ok){ok.onclick=()=>{const i=el.querySelector("#mAng");if(i&&!i.value.trim()){i.focus();return}tutup({angkatan:i?i.value.trim():""})};ok.focus()}
+    el.onclick=e=>{if(e.target===el)tutup(null)};
+  });
+}
+const TEMPLATE_KUNCI="/*TEMPLATE*/";
+function unduhTemplate(){const a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+TEMPLATE_KUNCI;a.download="Template_Kunci_Jawaban.xlsx";document.body.appendChild(a);a.click();a.remove();toast("Template kunci diunduh — isi tiga sheet jabatan lalu unggah lewat Upload kunci jawaban")}
 function pasangKunciJab(jab){KJ={};KJ_META={};Object.keys(jab).forEach(j=>{KJ[j]=jab[j].k;KJ_META[j]={sheet:jab[j].sheet,notes:jab[j].notes||[],pinjam:!!jab[j].pinjam}});sinkronJabatan()}
 async function muatKunci(f){
   try{
     const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});
     const m=bacaKunciMaster(wb);
-    if(window.ONLINE){await ONL.simpanKunciBaru(m,f.name);return}
+    const ok=await dialogKunci(m,f.name);if(!ok)return;
+    if(window.ONLINE){await ONL.simpanKunciBaru(m,f.name,ok.angkatan);return}
+    Object.values(m.jab).forEach(x=>x.k.forEach(k=>{if(k.unsurTemplate){k.unsur=k.unsurSimpan;HOOK.unsur(k)}}));
     pasangKunciJab(m.jab);KUNCI_SRC=f.name;muatKataWajib();nilaiUlang();VIEW="kunci";render();
-    toast("Kunci dimuat per jabatan — "+Object.keys(m.jab).map(j=>JAB[j].label+": "+m.jab[j].sheet).join(" · ")+(m.warn.length?" · "+m.warn.join("; "):""));
+    toast("Kunci dimuat per jabatan — "+Object.keys(m.jab).map(j=>JAB[j].label+": "+(m.jab[j].pinjam?"pakai "+m.jab[j].sheet:m.jab[j].sheet)).join(" · "));
   }catch(e){toast("Gagal membaca kunci: "+e.message)}
 }
 function nilaiUlang(){semua=semua.map(h=>nilaiParsed(h.parsed,h.file,h.jab))}
@@ -102,8 +171,9 @@ function render(){
   const badge={muat:"",rekap:hasil.length,fisik:hasil.length?`${nFis}/${hasil.length}`:"",detail:nCek?nCek:"",kunci:KUNCI.length,cat:nCat||"",tim:""};
   $("snav").innerHTML=VIEWS.map(([k,l])=>`<button class="${k===VIEW?"on":""}" data-v="${k}"><span class="dot"></span>${l}${badge[k]!==""?`<span class="badge ${(k==="cat"&&nCat)||(k==="detail"&&nCek)?"warn":""}">${badge[k]}</span>`:""}</button>`).join("");
   $("snav").querySelectorAll("button").forEach(b=>b.onclick=()=>{VIEW=b.dataset.v;render();window.scrollTo({top:0})});
-  $("kcard").innerHTML=(window.ONLINE?ONL.kartuKunci():"")+`<div class="kname">${esc(KUNCI_SRC)}</div><div class="ksub">Kunci ${esc(JA.label)}: ${KUNCI.length} berkas · sheet ${esc(KUNCI_SHEET||"–")}</div>${(KJ_META[JAKTIF]||{}).pinjam?`<div class="ksub" style="color:var(--amber)">Belum ada sheet khusus jabatan ini — sementara memakai kunci TerampilMahirPA.</div>`:""}<div class="kk">${KUNCI.map(k=>`<span class="tag">${esc(k.kk)}</span>`).join("")}</div><button class="btn sm" id="kUp"><span class="plus">+</span> Upload kunci jawaban</button>`;
+  $("kcard").innerHTML=(window.ONLINE?ONL.kartuKunci():"")+`<div class="kname">${esc(KUNCI_SRC)}</div><div class="ksub">Kunci ${esc(JA.label)}: ${KUNCI.length} berkas · sheet ${esc(KUNCI_SHEET||"–")}</div>${(KJ_META[JAKTIF]||{}).pinjam?`<div class="ksub" style="color:var(--amber)">Belum ada sheet khusus jabatan ini — sementara memakai kunci TerampilMahirPA.</div>`:""}<div class="kk">${KUNCI.map(k=>`<span class="tag">${esc(k.kk)}</span>`).join("")}</div><button class="btn sm" id="kUp"><span class="plus">+</span> Upload kunci jawaban</button><button class="btn sm ghost" id="kTpl" style="margin-top:6px">Unduh template kunci</button>`;
   $("kUp").onclick=()=>$("fKunci").click();
+  $("kTpl").onclick=unduhTemplate;
   if(window.ONLINE&&!ONL.admin)$("kUp").style.display="none";
   if(window.ONLINE)ONL.pasangKartu();
   $("dl").disabled=!hasil.length;
@@ -240,7 +310,7 @@ document.addEventListener("keydown",e=>{if(VIEW!=="fisik"||/INPUT|TEXTAREA|SELEC
   else if(e.key==="ArrowDown"||e.key==="ArrowUp"){const u=pesertaAktif().sort((a,b)=>a.nama.localeCompare(b.nama));const i=u.findIndex(x=>fKey(x)===FSEL);const j=Math.min(u.length-1,Math.max(0,i+(e.key==="ArrowDown"?1:-1)));if(u[j]){e.preventDefault();FSEL=fKey(u[j]);render()}}});
 
 function vKunci(v){
-  if(!KUNCI.length){v.innerHTML=`<div class="panel"><div class="empty"><h3>Belum ada kunci jawaban</h3><div>${window.ONLINE&&!ONL.admin?"Minta admin mengunggah file master angkatan.":"Upload file master angkatan (sheet MasterPraktik…_TerampilMahirPA)."}</div></div></div>`;return}
+  if(!KUNCI.length){v.innerHTML=`<div class="panel"><div class="empty"><h3>Belum ada kunci jawaban</h3><div>${window.ONLINE&&!ONL.admin?"Minta admin mengunggah file master angkatan.":"Upload file master angkatan atau template kunci yang sudah diisi."}</div><div style="margin-top:16px"><button class="btn" onclick="unduhTemplate()">Unduh template kunci</button></div></div></div>`;return}
   v.innerHTML=`<div class="panel"><p class="sub" style="margin:0 0 12px">Kunci <b>${esc(JAB[JAKTIF].label)}</b> · sumber <b>${esc(KUNCI_SRC)}</b> · sheet <b>${esc(KUNCI_SHEET||"–")}</b> · baris kunci ${KUNCI.map(k=>k.baris||"").filter(Boolean).join(", ")||"5, 8, 11, 14"} · kolom A–N. Parameter jumlah diambil dari kolom F: peserta boleh menulis satu atau beberapa satuan yang ada di kunci.</p><div class="tw kt" style="max-height:none"><table><thead><tr><th>No</th><th>KKA</th><th>Uraian informasi berkas</th><th>Unsur uraian <div class="sub">baris 1 kegiatan/inti · berikutnya subjek wajib · sinonim pakai |</div></th><th>Jumlah <div class="sub">parameter diterima</div></th><th>SKKA</th><th>Retensi aktif / inaktif</th><th>Nasib akhir</th><th>Usul</th></tr></thead><tbody>
   ${KUNCI.map((k,i)=>{const s=statusUsul(k);return`<tr><td class="sub">${k.no}</td><td><b>${esc(k.kk)}</b><div class="sub">${nItem(k)} item</div></td><td style="min-width:200px">${esc(k.uraian)}<div class="sub">Indeks: ${esc(k.indeks)}</div></td>
    <td style="min-width:300px"><textarea class="kw" data-i="${i}" rows="3" ${window.ONLINE&&!ONL.admin?"disabled":""}>${esc(k.unsur)}</textarea>${window.ONLINE&&!ONL.admin?"":`<button class="btn sm ghost kwr" data-i="${i}">Kembalikan otomatis</button>`}</td>
