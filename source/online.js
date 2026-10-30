@@ -159,6 +159,8 @@ const ONL={
       if(error)toast("Nilai fisik "+h.nama+" gagal disimpan: "+error.message);
     },350);
   },
+  async hapusSatu(h){this.setSync("run");const q=t=>this.sb.from(t).delete().eq("kunci_id",this.kunciId).eq("jabatan",h.jab).eq("file",h.file);
+    const r=await Promise.all([q("verifikasi"),q("fisik")]);const p=await q("peserta");const e=r.concat([p]).find(x=>x.error);this.setSync(e?"err":"ok");if(e)toast("Gagal menghapus: "+e.error.message)},
   async hapusFisik(h){clearTimeout(this.timer[h.jab+"|"+h.file]);this.setSync("run");
     const{error}=await this.sb.from("fisik").delete().eq("kunci_id",this.kunciId).eq("jabatan",h.jab).eq("file",h.file);this.setSync(error?"err":"ok");if(error)toast(error.message)},
   async muatCadangan(e){

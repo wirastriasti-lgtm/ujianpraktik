@@ -233,8 +233,10 @@ input[type=file]{display:none}
 th.srt{cursor:pointer;user-select:none}th.srt:hover{color:var(--ink)}th.srt .arr{color:var(--faint);font-size:11px}th.srt.on{color:var(--navy-ink)}th.srt.on .arr{color:var(--navy)}
 /* koreksi & cek */
 .dt td.cell{position:relative}
-.edb{position:absolute;top:8px;right:6px;border:1px solid var(--line);background:var(--surface);border-radius:6px;font-size:12px;line-height:1;padding:4px 6px;cursor:pointer;color:var(--muted);opacity:0;transition:opacity .12s}
-.dt td.cell:hover .edb,.edb:focus-visible{opacity:1}.edb:hover{color:var(--navy);border-color:var(--navy)}
+.edb{position:absolute;top:8px;right:6px;border:1px solid var(--line);background:var(--surface);border-radius:6px;font-size:12px;line-height:1;padding:4px 6px;cursor:pointer;color:var(--muted);opacity:.45;transition:opacity .12s}
+.dt td.cell:hover .edb,.edb:focus-visible{opacity:1}
+.korx{border:0;background:none;color:var(--navy-ink);cursor:pointer;font-size:11px;padding:0 0 0 6px;margin-left:2px;border-left:1px solid #bcd0e6}.korx:hover{color:var(--red)}
+.hpb{margin-left:8px;border:0;background:none;color:var(--faint);font-size:12px;cursor:pointer;padding:0;opacity:0}tr:hover .hpb,.hpb:focus-visible{opacity:1}.hpb:hover{color:var(--red);text-decoration:underline}.edb:hover{color:var(--navy);border-color:var(--navy)}
 .dt td.cell.kor{background:#eef4fb}
 .korb{display:inline-block;margin-left:6px;font-size:11px;font-weight:600;color:var(--navy-ink);background:var(--navy-bg);border-radius:10px;padding:1px 7px}
 .cekb{display:inline-block;margin-top:8px;border:1px solid var(--line);background:var(--surface);border-radius:20px;font-size:11.5px;padding:3px 10px;cursor:pointer;color:var(--muted)}
@@ -471,6 +473,8 @@ const ONL={
       if(error)toast("Nilai fisik "+h.nama+" gagal disimpan: "+error.message);
     },350);
   },
+  async hapusSatu(h){this.setSync("run");const q=t=>this.sb.from(t).delete().eq("kunci_id",this.kunciId).eq("jabatan",h.jab).eq("file",h.file);
+    const r=await Promise.all([q("verifikasi"),q("fisik")]);const p=await q("peserta");const e=r.concat([p]).find(x=>x.error);this.setSync(e?"err":"ok");if(e)toast("Gagal menghapus: "+e.error.message)},
   async hapusFisik(h){clearTimeout(this.timer[h.jab+"|"+h.file]);this.setSync("run");
     const{error}=await this.sb.from("fisik").delete().eq("kunci_id",this.kunciId).eq("jabatan",h.jab).eq("file",h.file);this.setSync(error?"err":"ok");if(error)toast(error.message)},
   async muatCadangan(e){
@@ -1119,7 +1123,10 @@ function vMuat(v,hasil,JA){
   ["dragover","dragenter"].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.add("over")}));
   ["dragleave","drop"].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.remove("over")}));
   d.addEventListener("drop",ev=>muat(ev.dataTransfer.files));
-  const r=$("rst");if(r)r.onclick=async()=>{if(window.ONLINE){if(!confirmKosong(JA))return;await ONL.hapusPeserta(JAKTIF)}semua=semua.filter(h=>h.jab!==JAKTIF);FSEL=null;render();toast("Data "+JA.label+" dikosongkan")};
+  const r=$("rst");if(r)r.onclick=async()=>{if(!confirmKosong(JA))return;if(window.ONLINE)await ONL.hapusPeserta(JAKTIF);
+    Object.keys(VER).filter(k=>k.startsWith(JAKTIF+"|")).forEach(k=>delete VER[k]);Object.keys(FISIK).filter(k=>k.startsWith(JAKTIF+"|")).forEach(k=>delete FISIK[k]);
+    if(!window.ONLINE){try{localStorage.setItem(VKEY,JSON.stringify(VER))}catch(e){}simpanFisik()}
+    semua=semua.filter(h=>h.jab!==JAKTIF);FSEL=null;render();toast("Data "+JA.label+" dikosongkan (termasuk nilai fisik, koreksi, dan tanda cek)")};
 }
 
 const ICON_SEARCH=`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>`;
@@ -1138,7 +1145,7 @@ function vRekap(v,hasil){
     <div class="field"><label>Urutkan</label><select id="srt">${OPS.some(o=>o[0]===cur)?"":`<option selected>Sesuai kolom yang diklik</option>`}${OPS.map(([k,l])=>`<option value="${k}" ${cur===k?"selected":""}>${l}</option>`).join("")}</select></div>
   </div>
   <div class="tw"><table><thead><tr><th class="n">No</th>${thSort(R,"nama","Peserta")}${KUNCI.map((k,i)=>thSort(R,"b"+i,`DA ${k.no}<div class="sub">${esc(k.kk)}</div>`,"n")).join("")}${thSort(R,"da","Rata DA","n")}${thSort(R,"fisik","Fisik","n")}${thSort(R,"total","Total","n")}<th>Status</th></tr></thead><tbody>
-  ${rows.map((o,i)=>`<tr><td class="n sub">${i+1}</td><td><span class="nm" data-k="${esc(fKey(o.h))}">${esc(o.h.nama)}</span>${o.h.catatan.length?`<div class="sub" style="color:var(--red)">${esc(o.h.catatan[0])}${o.h.catatan.length>1?` (+${o.h.catatan.length-1})`:""}</div>`:""}</td>
+  ${rows.map((o,i)=>`<tr><td class="n sub">${i+1}</td><td><span class="nm" data-k="${esc(fKey(o.h))}">${esc(o.h.nama)}</span>${!window.ONLINE||ONL.admin?`<button class="hpb" data-del="${esc(fKey(o.h))}" title="Hapus peserta ini (mis. salah upload)">Hapus</button>`:""}${o.h.catatan.length?`<div class="sub" style="color:var(--red)">${esc(o.h.catatan[0])}${o.h.catatan.length>1?` (+${o.h.catatan.length-1})`:""}</div>`:""}</td>
     ${o.h.berkas.map(b=>`<td class="n"><span class="sc ${cls(b.da)}">${fmt(b.da)}</span></td>`).join("")}
     <td class="n big">${fmt(o.h.rata)}</td><td class="n">${o.rf===null?`<button class="btn sm ghost" data-f="${esc(fKey(o.h))}">Nilai fisik</button>`:fmt(o.rf)}</td><td class="n big">${fmt(o.tot)}</td>
     <td>${o.rf===null?'<span class="pill no">Fisik belum</span>':'<span class="pill ok">Lengkap</span>'} ${perluCek(o.h)?'<span class="pill warn">Perlu dicek</span>':""}</td></tr>`).join("")}
@@ -1148,6 +1155,7 @@ function vRekap(v,hasil){
   $("flt").onchange=e=>{UI.filter=e.target.value;render()};$("srt").onchange=e=>{const[k,d]=e.target.value.split(":");if(d){UI.rs={k,d:+d};render()}};pasangSort(v,UI.rs);
   v.querySelectorAll(".nm").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.k);UI.dq=h?h.nama:"";UI.donly=false;VIEW="detail";render();window.scrollTo({top:0})});
   v.querySelectorAll("[data-f]").forEach(el=>el.onclick=()=>{FSEL=el.dataset.f;VIEW="fisik";render();window.scrollTo({top:0})});
+  v.querySelectorAll("[data-del]").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.del);if(h)hapusPesertaSatu(h)});
 }
 
 function vDetail(v,hasil,JA){
@@ -1161,15 +1169,18 @@ function vDetail(v,hasil,JA){
   v.innerHTML=`<div class="panel"><div class="toolbar">
     <div class="search">${ICON_SEARCH}<input id="dq" placeholder="Cari nama peserta…" value="${esc(UI.dq)}"></div>
     <div class="field"><label>Tampilkan</label><select id="donly">${[["semua","Semua berkas"],["perlu","Perlu dicek (belum)"],["sudah","Sudah dicek"],["kor","Dikoreksi penilai"]].map(([k,l])=>`<option value="${k}" ${String(UI.donly===true?"perlu":UI.donly===false?"semua":UI.donly)===k?"selected":""}>${l}</option>`).join("")}</select></div>
+    <button class="btn" id="hpsV" title="Hapus koreksi nilai dan tanda sudah dicek pada baris yang sedang tampil">Hapus koreksi &amp; tanda cek</button>
   </div>
   <div class="tw"><table class="dt"><thead><tr>${thSort(D,"nama","Peserta")}${thSort(D,"berkas","Berkas")}${JA.cols.map(c=>thSort(D,c,`${c}<div class="sub">${KOMP[c]}</div>`,"k")).join("")}${thSort(D,"da","Nilai DA","n")}<th>Uraian jawaban</th></tr></thead><tbody>
   ${lim.map(({h,b},i)=>{const baru=urutNilai||i===0||lim[i-1].h!==h;return`<tr class="${baru&&i&&!urutNilai?"grp":""}"><td>${baru?`<b>${esc(h.nama)}</b>`:`<span class="sub">${esc(h.nama)}</span>`}</td><td><b>${b.no} · ${esc(b.kkKunci)}</b><div class="sub">${esc(b.jaw.kk||"–")} · ${esc(b.cara)}</div>${b.cek?`<button class="cekb on" data-cek="${i}" title="Dicek ${esc(b.cek.oleh)} · ${esc(fmtT(b.cek.t))} — klik untuk membatalkan">✓ Sudah dicek</button>`:`<button class="cekb ${cekBerkas(b)?"perlu":""}" data-cek="${i}">${cekBerkas(b)?"Tandai sudah dicek":"Tandai dicek"}</button>`}</td>
-    ${JA.cols.map(c=>{const v=b.S[c],jw=JAWAB[c]?String(b.jaw[JAWAB[c]]||""):"";const kr=b.kor&&b.kor[c];return`<td class="cell ${kr?"kor":v!==null&&v<=20?"low":v!==null&&v<100?"mid":""}"><span class="sc ${cls(v)}">${fmt(v)}</span>${kr?`<span class="korb" title="Otomatis ${fmt(kr.auto)} · dikoreksi ${esc(kr.oleh||"")} ${esc(fmtT(kr.t))}">dikoreksi · ${fmt(kr.auto)}→${fmt(v)}</span>`:""}<button class="edb" data-kor="${i}|${c}" title="Koreksi nilai">✎</button><div class="why">${esc(b.D[c])}</div>${jw?`<div class="ans" title="${esc(jw)}">“${esc(jw)}”</div>`:""}</td>`}).join("")}
+    ${JA.cols.map(c=>{const v=b.S[c],jw=JAWAB[c]?String(b.jaw[JAWAB[c]]||""):"";const kr=b.kor&&b.kor[c];return`<td class="cell ${kr?"kor":v!==null&&v<=20?"low":v!==null&&v<100?"mid":""}"><span class="sc ${cls(v)}">${fmt(v)}</span>${kr?`<span class="korb" title="Otomatis ${fmt(kr.auto)} · dikoreksi ${esc(kr.oleh||"")} ${esc(fmtT(kr.t))}">dikoreksi · ${fmt(kr.auto)}→${fmt(v)}<button class="korx" data-undo="${i}|${c}" title="Hapus koreksi, kembali ke ${fmt(kr.auto)}">✕</button></span>`:""}<button class="edb" data-kor="${i}|${c}" title="Koreksi nilai">✎</button><div class="why">${esc(b.D[c])}</div>${jw?`<div class="ans" title="${esc(jw)}">“${esc(jw)}”</div>`:""}</td>`}).join("")}
     <td class="n big">${fmt(b.da)}</td><td class="ura">${esc(b.jaw.uraian)}${b.kurang&&b.kurang.length?`<div class="why" style="max-width:none">kurang: ${esc(b.kurang.join(", "))}</div>`:""}</td></tr>`}).join("")}
   </tbody></table>${rows.length?"":`<div class="empty">Tidak ada berkas yang cocok.</div>`}</div>
   <div class="sub" style="margin-top:10px">${rows.length} baris${rows.length>400?" · menampilkan 400 pertama, persempit dengan pencarian":""}</div></div>`;
   const qi=$("dq");qi.oninput=()=>{UI.dq=qi.value;const p=qi.selectionStart;render();const n=$("dq");n.focus();n.setSelectionRange(p,p)};
   $("donly").onchange=e=>{UI.donly=e.target.value;render()};
+  $("hpsV").onclick=()=>hapusVerifikasi(rows);
+  v.querySelectorAll("[data-undo]").forEach(el=>el.onclick=e=>{e.stopPropagation();const[i,c]=el.dataset.undo.split("|");const o=lim[+i],kr=o.b.kor[c];setKoreksi(o.h,o.b.no,c,null);render();toast(`Koreksi ${c} berkas ${o.b.no} dihapus · kembali ke ${fmt(kr.auto)}`)});
   v.querySelectorAll("[data-kor]").forEach(el=>el.onclick=()=>{const[i,c]=el.dataset.kor.split("|");const o=lim[+i];dialogKoreksi(o.h,o.b,c)});
   v.querySelectorAll("[data-cek]").forEach(el=>el.onclick=()=>{const o=lim[+el.dataset.cek];const on=!o.b.cek;setCek(o.h,o.b.no,on);render();toast(on?`${o.h.nama} berkas ${o.b.no} ditandai sudah dicek`:"Tanda dicek dihapus")});pasangSort(v,UI.ds);
 }
@@ -1292,7 +1303,22 @@ $("fKunci").onchange=e=>{if(e.target.files[0])muatKunci(e.target.files[0]);e.tar
 $("dl").onclick=unduh;
 $("fBak").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({versi:1,kunci:KUNCI_SRC,fisik:FISIK},null,1)],{type:"application/json"}));a.download="cadangan_nilai_fisik_"+new Date().toISOString().slice(0,16).replace(/[:T]/g,"-")+".json";a.click();toast("Cadangan nilai fisik diunduh")};
 $("fRes").onchange=async e=>{const fl=e.target.files[0];e.target.value="";if(!fl)return;try{const d=JSON.parse(await fl.text());const n=Object.keys(d.fisik||{}).length;Object.assign(FISIK,d.fisik||{});simpanFisik();render();toast(n+" nilai fisik dipulihkan dari cadangan")}catch(err){toast("Cadangan tidak terbaca: "+err.message)}};
-function confirmKosong(JA){return window.confirm("Hapus semua data "+JA.label+" untuk kunci ini dari server? Nilai fisik ikut terhapus.")}
+function confirmKosong(JA){return window.confirm("Hapus semua peserta "+JA.label+(window.ONLINE?" untuk kunci ini dari server":"")+"? Nilai fisik, koreksi, dan tanda cek ikut terhapus.")}
+// hapus satu peserta (mis. salah upload) beserta nilai fisik, koreksi, dan tanda ceknya
+async function hapusPesertaSatu(h){
+  if(!window.confirm("Hapus "+h.nama+" dari "+JAB[h.jab].label+"? Nilai fisik, koreksi, dan tanda ceknya ikut terhapus."))return;
+  const k=fKey(h);if(window.ONLINE)await ONL.hapusSatu(h);
+  delete VER[k];delete FISIK[k];if(!window.ONLINE){try{localStorage.setItem(VKEY,JSON.stringify(VER))}catch(e){}simpanFisik()}
+  semua=semua.filter(x=>fKey(x)!==k);if(FSEL===k)FSEL=null;render();toast(h.nama+" dihapus")}
+// hapus koreksi & tanda cek untuk baris yang sedang tampil (ikut filter/pencarian)
+function hapusVerifikasi(rows){
+  const target=rows.filter(o=>o.b.cek||Object.keys(o.b.kor||{}).length);
+  if(!target.length){toast("Tidak ada koreksi atau tanda cek di baris yang tampil");return}
+  const nK=target.reduce((a,o)=>a+Object.keys(o.b.kor||{}).length,0),nC=target.filter(o=>o.b.cek).length,orang=new Set(target.map(o=>fKey(o.h)));
+  if(!window.confirm(`Hapus ${nK} koreksi nilai dan ${nC} tanda sudah dicek dari ${orang.size} peserta (baris yang sedang tampil)? Nilai kembali ke hasil otomatis.`))return;
+  const per={};target.forEach(o=>{(per[fKey(o.h)]=per[fKey(o.h)]||{h:o.h,no:[]}).no.push(o.b.no)});
+  Object.values(per).forEach(({h,no})=>{const V=verGet(h);no.forEach(n=>{delete V.kor[n];delete V.cek[n]});verSimpan(h)});
+  render();toast(`${nK} koreksi dan ${nC} tanda cek dihapus`)}
 if(window.ONLINE){ONL.mulai()}else{muatKataWajib();render();}
 
 </script>
