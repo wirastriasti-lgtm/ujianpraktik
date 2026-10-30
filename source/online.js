@@ -96,7 +96,7 @@ const ONL={
     pasangKunciJab(jab);KUNCI_SRC=data.angkatan+" · "+(data.sumber||"");muatKataWajib();
   },
   async gantiKunci(id){this.kunciId=id;try{localStorage.setItem("kunciDipilih",String(id))}catch(e){}
-    semua=[];FISIK={};FSEL=null;await this.pakaiKunci();await this.muatData();this.dengar();toast("Kunci aktif: "+KUNCI_SRC)},
+    semua=[];FISIK={};VER={};FSEL=null;await this.pakaiKunci();await this.muatData();this.dengar();toast("Kunci aktif: "+KUNCI_SRC)},
   async simpanKunciBaru(m,fname,angkatan){
     if(!this.admin){toast("Hanya admin yang bisa mengunggah kunci.");return}
     if(!angkatan)return;
@@ -121,7 +121,8 @@ const ONL={
   async muatData(){
     if(!this.kunciId){VIEW="kunci";render();return}
     try{
-      const[ps,fs]=await Promise.all([this.ambilSemua("peserta","jabatan,file,data"),this.ambilSemua("fisik","jabatan,file,data,selesai,updated_by")]);
+      const[ps,fs,vs]=await Promise.all([this.ambilSemua("peserta","jabatan,file,data"),this.ambilSemua("fisik","jabatan,file,data,selesai,updated_by"),this.ambilSemua("verifikasi","jabatan,file,data")]);
+      VER={};vs.forEach(r=>{VER[r.jabatan+"|"+r.file]={kor:{},cek:{},...r.data}});
       semua=ps.map(r=>nilaiParsed(r.data,r.file,r.jabatan));
       FISIK={};fs.forEach(r=>{FISIK[r.jabatan+"|"+r.file]={...r.data,selesai:r.selesai,oleh:r.updated_by}});
       if(semua.length&&VIEW==="muat"){VIEW="rekap";const j=Object.keys(JAB).find(k=>semua.some(h=>h.jab===k));if(j&&!semua.some(h=>h.jab===JAKTIF))JAKTIF=j}
@@ -135,10 +136,19 @@ const ONL={
   },
   async hapusPeserta(jab){
     this.setSync("run");
+    await this.sb.from("verifikasi").delete().eq("kunci_id",this.kunciId).eq("jabatan",jab);
     const a=await this.sb.from("fisik").delete().eq("kunci_id",this.kunciId).eq("jabatan",jab);
     const b=await this.sb.from("peserta").delete().eq("kunci_id",this.kunciId).eq("jabatan",jab);
     const e=a.error||b.error;this.setSync(e?"err":"ok");if(e)toast("Gagal menghapus: "+e.message);
     Object.keys(FISIK).filter(k=>k.startsWith(jab+"|")).forEach(k=>delete FISIK[k]);
+  },
+  simpanVer(h,data){
+    const key=h.jab+"|"+h.file;this.pending["v|"+key]=true;this.setSync("run");clearTimeout(this.timer["v|"+key]);
+    this.timer["v|"+key]=setTimeout(async()=>{
+      const{error}=await this.sb.from("verifikasi").upsert({kunci_id:this.kunciId,jabatan:h.jab,file:h.file,data,updated_at:new Date().toISOString(),updated_by:this.email});
+      delete this.pending["v|"+key];this.setSync(error?"err":Object.keys(this.pending).length?"run":"ok");
+      if(error)toast("Koreksi/cek "+h.nama+" gagal disimpan: "+error.message);
+    },300);
   },
   simpanFisik(h,f){
     const key=h.jab+"|"+h.file;f.oleh=this.email;this.pending[key]=true;this.setSync("run");
@@ -163,6 +173,11 @@ const ONL={
     if(this.ch)this.sb.removeChannel(this.ch);if(!this.kunciId)return;
     const f="kunci_id=eq."+this.kunciId;
     this.ch=this.sb.channel("praktik-"+this.kunciId)
+      .on("postgres_changes",{event:"*",schema:"public",table:"verifikasi",filter:f},p=>{
+        const r=p.new&&p.new.file?p.new:p.old;const key=r.jabatan+"|"+r.file;
+        if(p.eventType==="DELETE")delete VER[key];else{if(r.updated_by===this.email&&this.pending["v|"+key])return;VER[key]={kor:{},cek:{},...r.data}}
+        const i=semua.findIndex(h=>h.jab===r.jabatan&&h.file===r.file);if(i>=0)semua[i]=nilaiParsed(semua[i].parsed,semua[i].file,semua[i].jab);
+        this.renderAman()})
       .on("postgres_changes",{event:"*",schema:"public",table:"fisik",filter:f},p=>{
         const r=p.new&&p.new.file?p.new:p.old;const key=r.jabatan+"|"+r.file;
         if(p.eventType==="DELETE"){delete FISIK[key]}else{if(r.updated_by===this.email&&this.pending[key])return;FISIK[key]={...r.data,selesai:r.selesai,oleh:r.updated_by}}

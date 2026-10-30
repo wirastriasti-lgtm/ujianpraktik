@@ -237,6 +237,13 @@ function nilaiParsed(p,file,jabKey){
     const da=J.cols.reduce((a,c)=>a+S[c],0)/J.div;
     return{no:k.no,kkKunci:k.kk,cara:idx>=0?cara:"tidak ditemukan",S,D,da,jaw:r,kurang,item:kkJ?(isi[kkJ]||0):0};
   });
+  // koreksi manual penilai & tanda "sudah dicek" (VER diisi ui.js / online.js)
+  const V=(typeof VER!=="undefined"&&VER&&VER[jabKey+"|"+file])||null;
+  berkas.forEach(b=>{b.kor={};b.cek=null;if(!V)return;
+    const kb=V.kor&&V.kor[b.no];
+    if(kb)Object.entries(kb).forEach(([c,o])=>{if(!J.cols.includes(c)||o==null||o.v===undefined)return;b.kor[c]={auto:b.S[c],autoD:b.D[c],...o};b.S[c]=Number(o.v);b.D[c]="dikoreksi"+(o.alasan?": "+o.alasan:"")+" · otomatis "+String(b.kor[c].auto).replace(".",",")});
+    if(Object.keys(b.kor).length)b.da=J.cols.reduce((a,c)=>a+b.S[c],0)/J.div;
+    b.cek=(V.cek&&V.cek[b.no])||null;});
   const rata=KUNCI.length?berkas.reduce((a,b)=>a+b.da,0)/KUNCI.length:0;
   return{nama:namaDariFile(file),file,jab:jabKey,berkas,rata,catatan,parsed:p};
 }

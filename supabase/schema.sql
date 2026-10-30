@@ -6,3 +6,4 @@
 -- fisik: penilaian fisik R/S/T per peserta
 -- Semua tabel memakai RLS: hanya email terdaftar di penilai yang bisa membaca; kunci & tim hanya diubah admin.
 -- Fungsi: email_saya(), is_penilai(), is_admin(), aktifkan_kunci(id). Realtime aktif untuk peserta, fisik, kunci.
+-- verifikasi: koreksi nilai manual penilai ({kor:{no:{kolom:{v,alasan,oleh,t}}}}) dan tanda sudah dicek ({cek:{no:{oleh,t}}}) per peserta
