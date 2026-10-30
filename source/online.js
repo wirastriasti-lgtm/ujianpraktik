@@ -100,7 +100,7 @@ const ONL={
   async simpanKunciBaru(m,fname,angkatan){
     if(!this.admin){toast("Hanya admin yang bisa mengunggah kunci.");return}
     if(!angkatan)return;
-    const berkas={};Object.keys(m.jab).forEach(j=>{const{cacat,sheetKosong,...x}=m.jab[j];berkas[j]={...x,k:x.k.map(k=>({...k,unsurSimpan:k.unsurSimpan||unsurBawaan(k)}))}});
+    const berkas={};Object.keys(m.jab).forEach(j=>{const{cacat,sheetKosong,kolom,...x}=m.jab[j];berkas[j]={...x,k:x.k.map(k=>({...k,unsurSimpan:k.unsurSimpan||unsurBawaan(k)}))}});
     const sheets=[...new Set(Object.values(m.jab).map(x=>x.sheet))].join(", ");
     const{data,error}=await this.sb.from("kunci").insert({angkatan:angkatan.trim(),sumber:fname,sheet:sheets,berkas,notes:[],aktif:false,updated_by:this.email}).select("id").single();
     if(error){toast("Gagal menyimpan kunci: "+error.message);return}

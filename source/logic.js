@@ -5,7 +5,7 @@ if(typeof KUNCI==="undefined"){var KUNCI=[];var KUNCI_SRC="Belum ada kunci";}
 //   terampil  ← MasterPraktik…_TerampilMahirPA  (Terampil / Mahir)
 //   penyelia  ← MasterPraktik…_PenyeliaPertama  (Penyelia / Ahli Pertama)
 //   muda      ← MasterPraktik…_Muda             (Ahli Muda)
-const JAB_SHEET={terampil:{label:"TerampilMahirPA",re:[/TerampilMahir/i]},penyelia:{label:"PenyeliaPertama",re:[/PenyeliaPertama/i,/Penyelia/i,/Pertama/i]},muda:{label:"Muda",re:[/Muda/i]}};
+const JAB_SHEET={terampil:{label:"TerampilMahirPA",re:[/TerampilMahir/i,/Ter?a?mpil/i,/Mahir/i]},penyelia:{label:"PenyeliaPertama",re:[/PenyeliaPertama/i,/Penyelia/i,/Pertama/i]},muda:{label:"Muda",re:[/Muda/i]}};
 if(typeof KJ==="undefined"){var KJ={terampil:KUNCI,penyelia:KUNCI,muda:KUNCI};var KJ_META={};}
 const kunciJab=j=>(KJ&&KJ[j])||[];
 // Unsur uraian bawaan per kunci yang sudah direview tim (dicocokkan lewat KK + kata penanda di uraian/indeks).
