@@ -230,6 +230,7 @@ input[type=file]{display:none}
 .mt{width:100%;margin-top:10px;font-size:12.5px}.mt td{padding:5px 8px;border-bottom:1px solid var(--line2)}
 .ml{margin:10px 0 0;padding-left:18px;font-size:13px}.ml li{margin:3px 0}.ml.bad{color:var(--red)}.ml.warn{color:var(--amber)}
 .mbar{display:flex;gap:10px;align-items:center;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+th.srt{cursor:pointer;user-select:none}th.srt:hover{color:var(--ink)}th.srt .arr{color:var(--faint);font-size:11px}th.srt.on{color:var(--navy-ink)}th.srt.on .arr{color:var(--navy)}
 .faint{color:var(--faint)}
 .toast{position:fixed;right:24px;bottom:24px;background:var(--ink);color:#fff;border-radius:12px;padding:12px 16px;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:0;transform:translateY(8px);transition:.2s;pointer-events:none;max-width:420px;z-index:50}
 .toast.show{opacity:1;transform:none}
@@ -787,7 +788,10 @@ function rataFisik(h){const KUNCI=kunciJab(h.jab);const f=FISIK[fKey(h)];if(!f||
 
 /* ================= STATE ================= */
 let semua=[],gagal=[],VIEW="muat",JAKTIF="muda",FSEL=null;
-const UI={q:"",filter:"semua",sort:"total",dq:"",donly:false};
+const UI={q:"",filter:"semua",rs:{k:"total",d:-1},dq:"",donly:false,ds:{k:null,d:-1}};
+// judul kolom yang bisa diklik untuk mengurutkan: klik pertama tertinggi dulu, klik lagi terendah dulu
+function thSort(st,key,label,cls){const on=st.k===key;return`<th class="srt ${cls||""} ${on?"on":""}" data-s="${key}" title="Klik untuk mengurutkan">${label}<span class="arr">${on?(st.d<0?" ▼":" ▲"):" ↕"}</span></th>`}
+function pasangSort(v,st){v.querySelectorAll("th.srt").forEach(th=>th.onclick=e=>{if(e.target.closest("input,button,select"))return;const k=th.dataset.s;if(st.k===k)st.d=-st.d;else{st.k=k;st.d=k==="nama"?1:-1}render()})}
 const r2=v=>Math.round(v*100)/100;
 const fmt=v=>v===null||v===undefined?"–":String(r2(v)).replace(".",",");
 const esc=x=>String(x??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -1015,14 +1019,15 @@ function vRekap(v,hasil){
   let rows=hasil.map(h=>({h,rf:rataFisik(h)})).map(o=>({...o,tot:o.rf===null?null:(o.rf+o.h.rata)/2}));
   rows=rows.filter(o=>!q||o.h.nama.toLowerCase().includes(q)||o.h.file.toLowerCase().includes(q));
   rows=rows.filter(o=>UI.filter==="semua"||(UI.filter==="fbelum"&&o.rf===null)||(UI.filter==="fsudah"&&o.rf!==null)||(UI.filter==="cek"&&perluCek(o.h)));
-  const S={total:(a,b)=>(b.tot??-1)-(a.tot??-1)||b.h.rata-a.h.rata,da:(a,b)=>b.h.rata-a.h.rata,nama:(a,b)=>a.h.nama.localeCompare(b.h.nama)};
-  rows.sort(S[UI.sort]);
+  const R=UI.rs,val=o=>R.k==="total"?(o.tot??-1):R.k==="da"?o.h.rata:R.k==="fisik"?(o.rf??-1):/^b\d$/.test(R.k)?(o.h.berkas[+R.k[1]]||{}).da??-1:0;
+  rows.sort((a,b)=>R.k==="nama"?R.d*a.h.nama.localeCompare(b.h.nama):(R.d*(val(a)-val(b))||a.h.nama.localeCompare(b.h.nama)));
+  const OPS=[["total:-1","Nilai total tertinggi"],["total:1","Nilai total terendah"],["da:-1","Nilai DA tertinggi"],["da:1","Nilai DA terendah"],["nama:1","Nama A–Z"],["nama:-1","Nama Z–A"]],cur=R.k+":"+R.d;
   v.innerHTML=`<div class="panel"><div class="toolbar">
     <div class="search">${ICON_SEARCH}<input id="q" placeholder="Cari nama peserta…" value="${esc(UI.q)}"></div>
     <div class="field"><label>Status</label><select id="flt">${[["semua","Semua peserta"],["fbelum","Fisik belum dinilai"],["fsudah","Fisik selesai"],["cek","Perlu dicek"]].map(([k,l])=>`<option value="${k}" ${UI.filter===k?"selected":""}>${l}</option>`).join("")}</select></div>
-    <div class="field"><label>Urutkan</label><select id="srt">${[["total","Nilai total tertinggi"],["da","Nilai DA tertinggi"],["nama","Nama A–Z"]].map(([k,l])=>`<option value="${k}" ${UI.sort===k?"selected":""}>${l}</option>`).join("")}</select></div>
+    <div class="field"><label>Urutkan</label><select id="srt">${OPS.some(o=>o[0]===cur)?"":`<option selected>Sesuai kolom yang diklik</option>`}${OPS.map(([k,l])=>`<option value="${k}" ${cur===k?"selected":""}>${l}</option>`).join("")}</select></div>
   </div>
-  <div class="tw"><table><thead><tr><th class="n">No</th><th>Peserta</th>${KUNCI.map(k=>`<th class="n">DA ${k.no}<div class="sub">${esc(k.kk)}</div></th>`).join("")}<th class="n">Rata DA</th><th class="n">Fisik</th><th class="n">Total</th><th>Status</th></tr></thead><tbody>
+  <div class="tw"><table><thead><tr><th class="n">No</th>${thSort(R,"nama","Peserta")}${KUNCI.map((k,i)=>thSort(R,"b"+i,`DA ${k.no}<div class="sub">${esc(k.kk)}</div>`,"n")).join("")}${thSort(R,"da","Rata DA","n")}${thSort(R,"fisik","Fisik","n")}${thSort(R,"total","Total","n")}<th>Status</th></tr></thead><tbody>
   ${rows.map((o,i)=>`<tr><td class="n sub">${i+1}</td><td><span class="nm" data-k="${esc(fKey(o.h))}">${esc(o.h.nama)}</span>${o.h.catatan.length?`<div class="sub" style="color:var(--red)">${esc(o.h.catatan[0])}${o.h.catatan.length>1?` (+${o.h.catatan.length-1})`:""}</div>`:""}</td>
     ${o.h.berkas.map(b=>`<td class="n"><span class="sc ${cls(b.da)}">${fmt(b.da)}</span></td>`).join("")}
     <td class="n big">${fmt(o.h.rata)}</td><td class="n">${o.rf===null?`<button class="btn sm ghost" data-f="${esc(fKey(o.h))}">Nilai fisik</button>`:fmt(o.rf)}</td><td class="n big">${fmt(o.tot)}</td>
@@ -1030,7 +1035,7 @@ function vRekap(v,hasil){
   </tbody></table>${rows.length?"":`<div class="empty">Tidak ada peserta yang cocok dengan filter.</div>`}</div>
   <div class="sub" style="margin-top:10px">${rows.length} dari ${hasil.length} peserta · klik nama untuk melihat rincian</div></div>`;
   const qi=$("q");qi.oninput=()=>{UI.q=qi.value;const p=qi.selectionStart;render();const n=$("q");n.focus();n.setSelectionRange(p,p)};
-  $("flt").onchange=e=>{UI.filter=e.target.value;render()};$("srt").onchange=e=>{UI.sort=e.target.value;render()};
+  $("flt").onchange=e=>{UI.filter=e.target.value;render()};$("srt").onchange=e=>{const[k,d]=e.target.value.split(":");if(d){UI.rs={k,d:+d};render()}};pasangSort(v,UI.rs);
   v.querySelectorAll(".nm").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.k);UI.dq=h?h.nama:"";UI.donly=false;VIEW="detail";render();window.scrollTo({top:0})});
   v.querySelectorAll("[data-f]").forEach(el=>el.onclick=()=>{FSEL=el.dataset.f;VIEW="fisik";render();window.scrollTo({top:0})});
 }
@@ -1038,20 +1043,23 @@ function vRekap(v,hasil){
 function vDetail(v,hasil,JA){
   if(!hasil.length)return emptyState(v);
   const q=UI.dq.toLowerCase();
-  const rows=hasil.slice().sort((a,b)=>a.nama.localeCompare(b.nama)).filter(h=>!q||h.nama.toLowerCase().includes(q)).flatMap(h=>h.berkas.map(b=>({h,b}))).filter(o=>!UI.donly||cekBerkas(o.b));
+  const D=UI.ds;
+  let rows=hasil.slice().sort((a,b)=>a.nama.localeCompare(b.nama)*(D.k==="nama"?D.d:1)).filter(h=>!q||h.nama.toLowerCase().includes(q)).flatMap(h=>h.berkas.map(b=>({h,b}))).filter(o=>!UI.donly||cekBerkas(o.b));
+  const urutNilai=D.k&&D.k!=="nama";
+  if(urutNilai){const val=o=>D.k==="da"?o.b.da:D.k==="berkas"?o.b.no:o.b.S[D.k];rows=rows.map((o,i)=>[o,i]).sort((x,y)=>{const a=val(x[0]),b=val(y[0]);if(a===null||a===undefined)return 1;if(b===null||b===undefined)return -1;return D.d*(a-b)||x[1]-y[1]}).map(x=>x[0])}
   const lim=rows.slice(0,400);
   v.innerHTML=`<div class="panel"><div class="toolbar">
     <div class="search">${ICON_SEARCH}<input id="dq" placeholder="Cari nama peserta…" value="${esc(UI.dq)}"></div>
     <div class="field"><label>Tampilkan</label><select id="donly"><option value="0">Semua berkas</option><option value="1" ${UI.donly?"selected":""}>Hanya yang perlu dicek</option></select></div>
   </div>
-  <div class="tw"><table class="dt"><thead><tr><th>Peserta</th><th>Berkas</th>${JA.cols.map(c=>`<th class="k">${c}<div class="sub">${KOMP[c]}</div></th>`).join("")}<th class="n">Nilai DA</th><th>Uraian jawaban</th></tr></thead><tbody>
-  ${lim.map(({h,b},i)=>{const baru=i===0||lim[i-1].h!==h;return`<tr class="${baru&&i?"grp":""}"><td>${baru?`<b>${esc(h.nama)}</b>`:`<span class="sub">${esc(h.nama)}</span>`}</td><td><b>${b.no} · ${esc(b.kkKunci)}</b><div class="sub">${esc(b.jaw.kk||"–")} · ${esc(b.cara)}</div></td>
+  <div class="tw"><table class="dt"><thead><tr>${thSort(D,"nama","Peserta")}${thSort(D,"berkas","Berkas")}${JA.cols.map(c=>thSort(D,c,`${c}<div class="sub">${KOMP[c]}</div>`,"k")).join("")}${thSort(D,"da","Nilai DA","n")}<th>Uraian jawaban</th></tr></thead><tbody>
+  ${lim.map(({h,b},i)=>{const baru=urutNilai||i===0||lim[i-1].h!==h;return`<tr class="${baru&&i&&!urutNilai?"grp":""}"><td>${baru?`<b>${esc(h.nama)}</b>`:`<span class="sub">${esc(h.nama)}</span>`}</td><td><b>${b.no} · ${esc(b.kkKunci)}</b><div class="sub">${esc(b.jaw.kk||"–")} · ${esc(b.cara)}</div></td>
     ${JA.cols.map(c=>{const v=b.S[c],jw=JAWAB[c]?String(b.jaw[JAWAB[c]]||""):"";return`<td class="cell ${v!==null&&v<=20?"low":v!==null&&v<100?"mid":""}"><span class="sc ${cls(v)}">${fmt(v)}</span><div class="why">${esc(b.D[c])}</div>${jw?`<div class="ans" title="${esc(jw)}">“${esc(jw)}”</div>`:""}</td>`}).join("")}
     <td class="n big">${fmt(b.da)}</td><td class="ura">${esc(b.jaw.uraian)}${b.kurang&&b.kurang.length?`<div class="why" style="max-width:none">kurang: ${esc(b.kurang.join(", "))}</div>`:""}</td></tr>`}).join("")}
   </tbody></table>${rows.length?"":`<div class="empty">Tidak ada berkas yang cocok.</div>`}</div>
   <div class="sub" style="margin-top:10px">${rows.length} baris${rows.length>400?" · menampilkan 400 pertama, persempit dengan pencarian":""}</div></div>`;
   const qi=$("dq");qi.oninput=()=>{UI.dq=qi.value;const p=qi.selectionStart;render();const n=$("dq");n.focus();n.setSelectionRange(p,p)};
-  $("donly").onchange=e=>{UI.donly=e.target.value==="1";render()};
+  $("donly").onchange=e=>{UI.donly=e.target.value==="1";render()};pasangSort(v,UI.ds);
 }
 
 const GL=["Guide primer","Guide sekunder","Guide tersier","Folder"];
