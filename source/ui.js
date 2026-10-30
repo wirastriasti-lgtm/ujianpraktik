@@ -302,7 +302,7 @@ function emptyState(v){
 function vMuat(v,hasil,JA){
   v.innerHTML=`<div class="drop" id="drop"><h3>Tarik &amp; lepas file jawaban di sini</h3>
     <div class="sub">File akan dinilai sebagai <b>${esc(JA.label)}</b> dengan kunci <b>${esc(KUNCI_SRC)}</b>.</div>
-    <div class="actions" style="justify-content:center;margin:16px 0 0"><button class="btn pri" onclick="document.getElementById('fDir').click()"><span class="plus">+</span> Pilih folder</button><button class="btn" onclick="document.getElementById('fFiles').click()">Pilih file</button>${hasil.length&&(!window.ONLINE||ONL.admin)?`<button class="btn ghost" id="rst">Kosongkan ${esc(JA.label)}</button>`:""}</div>
+    <div class="actions" style="justify-content:center;margin:16px 0 0"><button class="btn pri" onclick="document.getElementById('fDir').click()"><span class="plus">+</span> Pilih folder</button><button class="btn" onclick="document.getElementById('fFiles').click()">Pilih file</button>${hasil.length&&(!window.ONLINE||ONL.admin)?`<button class="btn danger" id="rst">Hapus semua peserta ${esc(JA.label)}</button>`:""}</div>
     <div class="prog" id="prog"><i></i></div><div class="sub" id="progl" style="margin-top:6px"></div></div>
   <div class="steps"><div class="step"><span class="no">1</span><b>Pilih jabatan</b><span class="sub">Menu atas: Ahli Muda, Penyelia/Pertama, atau Terampil/Mahir. Komponen nilai mengikuti jabatan.</span></div>
   <div class="step"><span class="no">2</span><b>Cek kunci angkatan</b><span class="sub">Lihat kartu “Kunci jawaban aktif” di samping. Upload master angkatan bila berbeda.</span></div>
@@ -311,10 +311,7 @@ function vMuat(v,hasil,JA){
   ["dragover","dragenter"].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.add("over")}));
   ["dragleave","drop"].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.remove("over")}));
   d.addEventListener("drop",ev=>muat(ev.dataTransfer.files));
-  const r=$("rst");if(r)r.onclick=async()=>{if(!confirmKosong(JA))return;if(window.ONLINE)await ONL.hapusPeserta(JAKTIF);
-    Object.keys(VER).filter(k=>k.startsWith(JAKTIF+"|")).forEach(k=>delete VER[k]);Object.keys(FISIK).filter(k=>k.startsWith(JAKTIF+"|")).forEach(k=>delete FISIK[k]);
-    if(!window.ONLINE){try{localStorage.setItem(VKEY,JSON.stringify(VER))}catch(e){}simpanFisik()}
-    semua=semua.filter(h=>h.jab!==JAKTIF);FSEL=null;render();toast("Data "+JA.label+" dikosongkan (termasuk nilai fisik, koreksi, dan tanda cek)")};
+  const r=$("rst");if(r)r.onclick=kosongkanJabatan;
 }
 
 const ICON_SEARCH=`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>`;
@@ -331,6 +328,7 @@ function vRekap(v,hasil){
     <div class="search">${ICON_SEARCH}<input id="q" placeholder="Cari nama peserta…" value="${esc(UI.q)}"></div>
     <div class="field"><label>Status</label><select id="flt">${[["semua","Semua peserta"],["fbelum","Fisik belum dinilai"],["fsudah","Fisik selesai"],["cek","Perlu dicek"]].map(([k,l])=>`<option value="${k}" ${UI.filter===k?"selected":""}>${l}</option>`).join("")}</select></div>
     <div class="field"><label>Urutkan</label><select id="srt">${OPS.some(o=>o[0]===cur)?"":`<option selected>Sesuai kolom yang diklik</option>`}${OPS.map(([k,l])=>`<option value="${k}" ${cur===k?"selected":""}>${l}</option>`).join("")}</select></div>
+    ${!window.ONLINE||ONL.admin?`<button class="btn danger" id="rstR" title="Hapus semua peserta ${esc(JAB[JAKTIF].label)} beserta nilai fisik, koreksi, dan tanda cek">Hapus semua peserta</button>`:""}
   </div>
   <div class="tw"><table><thead><tr><th class="n">No</th>${thSort(R,"nama","Peserta")}${KUNCI.map((k,i)=>thSort(R,"b"+i,`DA ${k.no}<div class="sub">${esc(k.kk)}</div>`,"n")).join("")}${thSort(R,"da","Rata DA","n")}${thSort(R,"fisik","Fisik","n")}${thSort(R,"total","Total","n")}<th>Status</th></tr></thead><tbody>
   ${rows.map((o,i)=>`<tr><td class="n sub">${i+1}</td><td><span class="nm" data-k="${esc(fKey(o.h))}">${esc(o.h.nama)}</span>${!window.ONLINE||ONL.admin?`<button class="hpb" data-del="${esc(fKey(o.h))}" title="Hapus peserta ini (mis. salah upload)">Hapus</button>`:""}${o.h.catatan.length?`<div class="sub" style="color:var(--red)">${esc(o.h.catatan[0])}${o.h.catatan.length>1?` (+${o.h.catatan.length-1})`:""}</div>`:""}</td>
@@ -340,7 +338,7 @@ function vRekap(v,hasil){
   </tbody></table>${rows.length?"":`<div class="empty">Tidak ada peserta yang cocok dengan filter.</div>`}</div>
   <div class="sub" style="margin-top:10px">${rows.length} dari ${hasil.length} peserta · klik nama untuk melihat rincian</div></div>`;
   const qi=$("q");qi.oninput=()=>{UI.q=qi.value;const p=qi.selectionStart;render();const n=$("q");n.focus();n.setSelectionRange(p,p)};
-  $("flt").onchange=e=>{UI.filter=e.target.value;render()};$("srt").onchange=e=>{const[k,d]=e.target.value.split(":");if(d){UI.rs={k,d:+d};render()}};pasangSort(v,UI.rs);
+  $("flt").onchange=e=>{UI.filter=e.target.value;render()};$("srt").onchange=e=>{const[k,d]=e.target.value.split(":");if(d){UI.rs={k,d:+d};render()}};pasangSort(v,UI.rs);const rr=$("rstR");if(rr)rr.onclick=kosongkanJabatan;
   v.querySelectorAll(".nm").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.k);UI.dq=h?h.nama:"";UI.donly=false;VIEW="detail";render();window.scrollTo({top:0})});
   v.querySelectorAll("[data-f]").forEach(el=>el.onclick=()=>{FSEL=el.dataset.f;VIEW="fisik";render();window.scrollTo({top:0})});
   v.querySelectorAll("[data-del]").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.del);if(h)hapusPesertaSatu(h)});
@@ -491,6 +489,10 @@ $("fKunci").onchange=e=>{if(e.target.files[0])muatKunci(e.target.files[0]);e.tar
 $("dl").onclick=unduh;
 $("fBak").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({versi:1,kunci:KUNCI_SRC,fisik:FISIK},null,1)],{type:"application/json"}));a.download="cadangan_nilai_fisik_"+new Date().toISOString().slice(0,16).replace(/[:T]/g,"-")+".json";a.click();toast("Cadangan nilai fisik diunduh")};
 $("fRes").onchange=async e=>{const fl=e.target.files[0];e.target.value="";if(!fl)return;try{const d=JSON.parse(await fl.text());const n=Object.keys(d.fisik||{}).length;Object.assign(FISIK,d.fisik||{});simpanFisik();render();toast(n+" nilai fisik dipulihkan dari cadangan")}catch(err){toast("Cadangan tidak terbaca: "+err.message)}};
+async function kosongkanJabatan(){const JA=JAB[JAKTIF];if(!confirmKosong(JA))return;if(window.ONLINE)await ONL.hapusPeserta(JAKTIF);
+  Object.keys(VER).filter(k=>k.startsWith(JAKTIF+"|")).forEach(k=>delete VER[k]);Object.keys(FISIK).filter(k=>k.startsWith(JAKTIF+"|")).forEach(k=>delete FISIK[k]);
+  if(!window.ONLINE){try{localStorage.setItem(VKEY,JSON.stringify(VER))}catch(e){}simpanFisik()}
+  semua=semua.filter(h=>h.jab!==JAKTIF);FSEL=null;render();toast("Semua peserta "+JA.label+" dihapus (termasuk nilai fisik, koreksi, dan tanda cek)")}
 function confirmKosong(JA){return window.confirm("Hapus semua peserta "+JA.label+(window.ONLINE?" untuk kunci ini dari server":"")+"? Nilai fisik, koreksi, dan tanda cek ikut terhapus.")}
 // hapus satu peserta (mis. salah upload) beserta nilai fisik, koreksi, dan tanda ceknya
 async function hapusPesertaSatu(h){
