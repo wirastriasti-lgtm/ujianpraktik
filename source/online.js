@@ -96,7 +96,7 @@ const ONL={
     pasangKunciJab(jab);KUNCI_SRC=data.angkatan+" · "+(data.sumber||"");muatKataWajib();
   },
   async gantiKunci(id){this.kunciId=id;try{localStorage.setItem("kunciDipilih",String(id))}catch(e){}
-    semua=[];FISIK={};VER={};FSEL=null;await this.pakaiKunci();await this.muatData();this.dengar();toast("Kunci aktif: "+KUNCI_SRC)},
+    semua=[];FISIK={};VER={};DAFTAR=[];FSEL=null;await this.pakaiKunci();await this.muatData();this.dengar();toast("Kunci aktif: "+KUNCI_SRC)},
   async simpanKunciBaru(m,fname,angkatan){
     if(!this.admin){toast("Hanya admin yang bisa mengunggah kunci.");return}
     if(!angkatan)return;
@@ -122,6 +122,7 @@ const ONL={
     if(!this.kunciId){VIEW="kunci";render();return}
     try{
       const[ps,fs,vs]=await Promise.all([this.ambilSemua("peserta","jabatan,file,data"),this.ambilSemua("fisik","jabatan,file,data,selesai,updated_by"),this.ambilSemua("verifikasi","jabatan,file,data")]);
+      await this.muatDaftarServer();
       VER={};vs.forEach(r=>{VER[r.jabatan+"|"+r.file]={kor:{},cek:{},...r.data}});
       semua=ps.map(r=>nilaiParsed(r.data,r.file,r.jabatan));
       FISIK={};fs.forEach(r=>{FISIK[r.jabatan+"|"+r.file]={...r.data,selesai:r.selesai,oleh:r.updated_by}});
@@ -142,6 +143,22 @@ const ONL={
     const e=a.error||b.error;this.setSync(e?"err":"ok");if(e)toast("Gagal menghapus: "+e.message);
     Object.keys(FISIK).filter(k=>k.startsWith(jab+"|")).forEach(k=>delete FISIK[k]);
   },
+  /* ---------- daftar peserta ---------- */
+  dariBaris(r){return{id:"d"+r.id,dbid:r.id,no:r.urut,nama:r.nama,nip:r.nip||"",instansi:r.instansi||"",jenis:r.jenis||"",tujuan:r.tujuan||"",jab:r.jabatan||null,fileHint:r.file_hint||"",file:r.file||null,jabPakai:r.jab_pakai||null}},
+  async muatDaftarServer(){const rows=await this.ambilSemua("daftar_peserta","*");DAFTAR=rows.sort((a,b)=>(a.urut||0)-(b.urut||0)).map(r=>this.dariBaris(r))},
+  async simpanDaftar(list){
+    if(!this.admin){toast("Hanya admin yang bisa mengunggah daftar peserta.");return false}
+    this.setSync("run");
+    const del=await this.sb.from("daftar_peserta").delete().eq("kunci_id",this.kunciId);
+    if(del.error){this.setSync("err");toast("Gagal mengganti daftar: "+del.error.message);return false}
+    const rows=list.map(d=>({kunci_id:this.kunciId,urut:d.no,nama:d.nama,nip:d.nip||null,instansi:d.instansi||null,jenis:d.jenis||null,tujuan:d.tujuan||null,jabatan:d.jab||null,file_hint:d.fileHint||null,file:null,updated_by:this.email}));
+    const{data,error}=await this.sb.from("daftar_peserta").insert(rows).select("*");
+    if(error){this.setSync("err");toast("Gagal menyimpan daftar: "+error.message);return false}
+    DAFTAR=data.sort((a,b)=>(a.urut||0)-(b.urut||0)).map(r=>this.dariBaris(r));this.setSync("ok");return true;
+  },
+  async simpanLink(d){if(!d.dbid)return;this.setSync("run");
+    const{error}=await this.sb.from("daftar_peserta").update({file:d.file,jab_pakai:d.file?(d.jabPakai||d.jab):null,updated_at:new Date().toISOString(),updated_by:this.email}).eq("id",d.dbid);
+    this.setSync(error?"err":"ok");if(error)toast("Gagal menyimpan hubungan "+d.nama+": "+error.message)},
   simpanVer(h,data){
     const key=h.jab+"|"+h.file;this.pending["v|"+key]=true;this.setSync("run");clearTimeout(this.timer["v|"+key]);
     this.timer["v|"+key]=setTimeout(async()=>{
@@ -175,6 +192,7 @@ const ONL={
     if(this.ch)this.sb.removeChannel(this.ch);if(!this.kunciId)return;
     const f="kunci_id=eq."+this.kunciId;
     this.ch=this.sb.channel("praktik-"+this.kunciId)
+      .on("postgres_changes",{event:"*",schema:"public",table:"daftar_peserta",filter:f},()=>{clearTimeout(this._dt);this._dt=setTimeout(async()=>{await this.muatDaftarServer();this.renderAman()},400)})
       .on("postgres_changes",{event:"*",schema:"public",table:"verifikasi",filter:f},p=>{
         const r=p.new&&p.new.file?p.new:p.old;const key=r.jabatan+"|"+r.file;
         if(p.eventType==="DELETE")delete VER[key];else{if(r.updated_by===this.email&&this.pending["v|"+key])return;VER[key]={kor:{},cek:{},...r.data}}

@@ -26,14 +26,15 @@ rules = rules[:i] + ' "<b>Fisik berkas</b> (notes + praktik penilai, diisi di me
 esc = lambda t: t.replace("</script>", "<\\/script>")
 xlsx = esc(rd(NM + "xlsx/dist/xlsx.full.min.js"))
 logic, ui = rd(B + "/logic.js"), rd(B + "/ui.js")
+daftar = rd(B + "/daftar.js").replace('"/*TEMPLATE_DAFTAR*/"', '"' + base64.b64encode(open(B + "/Template_Daftar_Peserta.xlsx", "rb").read()).decode() + '"')
 ui = ui.replace('"/*TEMPLATE*/"', '"' + base64.b64encode(open(B + "/Template_Kunci_Jawaban.xlsx", "rb").read()).decode() + '"')
 
 if os.path.exists(B + "/kunci_default.js"):
-  off = "<script>" + xlsx + "</script>\n<script>\n" + rd(B + "/kunci_default.js") + "\n" + logic + "\n" + rules + "\n" + ui + "\n</script>"
+  off = "<script>" + xlsx + "</script>\n<script>\n" + rd(B + "/kunci_default.js") + "\n" + logic + "\n" + rules + "\n" + daftar + "\n" + ui + "\n</script>"
   open(SP + "/Penilaian_Ujian_Praktik_Offline.html", "w", encoding="utf-8").write(shell.replace("<!--SCRIPTS-->", off))
 
 SBJS = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"  # UMD build tidak bisa di-inline (webpack publicPath)
-on = "<script>" + xlsx + "</script>\n<script src=\"" + SBJS + "\" crossorigin=\"anonymous\"></script>\n<script>\n" + rd(B + "/online.js") + "\n" + logic + "\n" + rules + "\n" + ui + "\n</script>"
+on = "<script>" + xlsx + "</script>\n<script src=\"" + SBJS + "\" crossorigin=\"anonymous\"></script>\n<script>\n" + rd(B + "/online.js") + "\n" + logic + "\n" + rules + "\n" + daftar + "\n" + ui + "\n</script>"
 os.makedirs(SP + "/online", exist_ok=True)
 open(SP + "/online/index.html", "w", encoding="utf-8").write(
     shell.replace("<title>Penilaian Ujian Praktik</title>", "<title>Penilaian Ujian Praktik</title>\n<meta name=\"robots\" content=\"noindex,nofollow\">").replace("<!--SCRIPTS-->", on))

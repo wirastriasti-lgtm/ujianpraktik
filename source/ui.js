@@ -103,21 +103,31 @@ async function muat(list){
   for(let i=0;i<files.length;i++){const f=files[i];
     try{const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});
       if(wb.SheetNames.some(n=>/^MasterPraktik/i.test(n))){gagal.push([f.name,"File master/kunci, dilewati. Pakai tombol Upload kunci jawaban."]);skip++;continue}
-      const p=parseWb(wb);baca.push({f,p,t:tebakJabatan(f.name,p)});
+      const p=parseWb(wb);p.identitas=bacaIdentitas(wb);baca.push({f,p,t:tebakJabatan(f.name,p)});
     }catch(e){gagal.push([f.name,e.message]);skip++}
     if(bar){bar.style.width=(100*(i+1)/files.length)+"%";lbl.textContent=`Membaca ${i+1} dari ${files.length} file…`}
     if(i%5===4)await new Promise(r=>setTimeout(r,0));
   }
-  // file yang jabatannya terdeteksi beda dengan tab aktif (deteksi lemah dari isi kolom hanya dipakai bila Muda/Penyelia diunggah di tab Terampil, atau Terampil di tab Muda)
+  let jabOf,pesertaOf=()=>null;
+  if(DAFTAR.length){
+    // ada daftar peserta: cocokkan tiap file ke daftar; jabatan ikut tujuan jabatan di daftar
+    baca.forEach(x=>{x.m=cocokkanFile(x.f.name,x.p);if(x.m.d&&x.m.d.file&&x.m.d.file!==x.f.name){x.m.status="duplikat";x.m.d=null}});
+    let hasil=baca.map(x=>({d:x.m.d,jab:x.m.d&&x.m.d.jab?x.m.d.jab:(x.t?x.t.j:JAKTIF)}));
+    if(baca.some(x=>!x.m.d||!x.m.d.jab)){hasil=await dialogCocok(baca);if(!hasil){VIEW="muat";render();toast("Upload dibatalkan");return}}
+    jabOf=x=>hasil[baca.indexOf(x)].jab;pesertaOf=x=>hasil[baca.indexOf(x)].d;
+  }else{
+  // tanpa daftar: tebak jabatan (deteksi lemah dari isi kolom hanya dipakai bila Muda/Penyelia diunggah di tab Terampil, atau Terampil di tab Muda)
   const beda=baca.filter(x=>x.t&&x.t.j!==JAKTIF&&(!x.t.lemah||JAKTIF==="terampil"||x.t.j==="terampil"&&JAKTIF==="muda"));
   let pilih=beda.map(()=>JAKTIF);
   if(beda.length){pilih=await dialogJabatan(beda);if(!pilih){VIEW="muat";render();toast("Upload dibatalkan");return}}
-  const jabOf=x=>{const i=beda.indexOf(x);return i>=0?pilih[i]:JAKTIF};
+  jabOf=x=>{const i=beda.indexOf(x);return i>=0?pilih[i]:JAKTIF};
+  }
   const per={};let ok=0;
   for(const x of baca){const jab=jabOf(x);
     if(!kunciJab(jab).length){gagal.push([x.f.name,"Kunci "+JAB[jab].label+" belum ada"]);skip++;continue}
     const j=semua.findIndex(h=>h.file===x.f.name&&h.jab===jab);const h=nilaiParsed(x.p,x.f.name,jab);if(j>=0)semua[j]=h;else semua.push(h);ok++;per[jab]=(per[jab]||0)+1;
     if(window.ONLINE)await ONL.simpanPeserta(h);
+    const d=pesertaOf(x);if(d)hubungkan(d,x.f.name,jab);
   }
   const ke=Object.entries(per).map(([j,n])=>n+" ke "+JAB[j].label).join(", ");
   if(per[JAKTIF]===undefined&&Object.keys(per).length===1)JAKTIF=Object.keys(per)[0];
@@ -250,7 +260,7 @@ async function muatKunci(f){
 function nilaiUlang(){semua=semua.map(h=>nilaiParsed(h.parsed,h.file,h.jab))}
 
 /* ================= RENDER ================= */
-const VIEWS=[["muat","Muat data"],["rekap","Rekap peserta"],["fisik","Penilaian fisik"],["detail","Rincian per berkas"],["kunci","Kunci & rules"],["cat","Catatan"]].concat(window.ONLINE?[["tim","Tim penilai"]]:[]);
+const VIEWS=[["muat","Muat data"],["daftar","Daftar peserta"],["rekap","Rekap peserta"],["fisik","Penilaian fisik"],["detail","Rincian per berkas"],["kunci","Kunci & rules"],["cat","Catatan"]].concat(window.ONLINE?[["tim","Tim penilai"]]:[]);
 const HEAD={
   muat:["Muat jawaban <em>peserta</em>.","Pilih jabatan di menu atas, pastikan kunci jawaban sudah sesuai angkatan, lalu muat folder berisi file Excel jawaban peserta. Semua diproses di laptop ini — tanpa internet, tanpa unggah ke mana pun."],
   rekap:["Rekap nilai peserta, <em>per jabatan</em>.","Nilai daftar arsip dihitung otomatis terhadap kunci; nilai fisik berkas diisi penilai. Nilai total muncul setelah penilaian fisik ditandai selesai."],
@@ -258,6 +268,7 @@ const HEAD={
   detail:["Rincian nilai <em>per berkas</em>.","Setiap nilai disertai alasan dan jawaban asli peserta. Arahkan kursor ke nilai lalu klik ✎ untuk mengoreksi, dan tandai berkas yang sudah diverifikasi supaya daftar “perlu dicek” berkurang."],
   kunci:["Kunci jawaban & <em>rules</em>.","Kunci dibaca dari file master angkatan. Unsur uraian menentukan seberapa ketat penilaian uraian informasi — sesuaikan bila angkatan berganti."],
   cat:["Catatan & <em>masalah file</em>.","File yang gagal dibaca, sheet yang tidak ditemukan, atau berkas yang tidak bisa dicocokkan dengan kunci."],
+  daftar:["Daftar <em>peserta</em>.","Upload daftar resmi peserta (nama, jenis sertifikasi, tujuan jabatan). File jawaban otomatis dicocokkan ke daftar ini dan dinilai sesuai tujuan jabatannya, dan peserta yang belum mengumpulkan langsung terlihat."],
   tim:["Tim <em>penilai</em>.","Hanya email yang terdaftar di sini yang bisa membuka data penilaian. Admin bisa menambah atau menghapus penilai."]
 };
 function render(){
@@ -265,7 +276,7 @@ function render(){
   $("jnav").innerHTML=Object.entries(JAB).map(([k,v])=>`<button class="${k===JAKTIF?"on":""}" data-j="${k}">${v.label}<span class="cnt">${semua.filter(h=>h.jab===k).length}</span></button>`).join("");
   $("jnav").querySelectorAll("button").forEach(b=>b.onclick=()=>{JAKTIF=b.dataset.j;FSEL=null;if(!pesertaAktif().length&&VIEW!=="kunci")VIEW="muat";render()});
   const nFis=hasil.filter(h=>rataFisik(h)!==null).length,nCek=hasil.filter(perluCek).length,nCat=hasil.reduce((a,h)=>a+h.catatan.length,0)+gagal.length;
-  const badge={muat:"",rekap:hasil.length,fisik:hasil.length?`${nFis}/${hasil.length}`:"",detail:nCek?nCek:"",kunci:KUNCI.length,cat:nCat||"",tim:""};
+  const badge={muat:"",rekap:hasil.length,fisik:hasil.length?`${nFis}/${hasil.length}`:"",detail:nCek?nCek:"",kunci:KUNCI.length,cat:nCat||"",tim:"",daftar:DAFTAR.length?`${DAFTAR.filter(d=>d.file&&semua.some(h=>h.file===d.file)).length}/${DAFTAR.length}`:""};
   $("snav").innerHTML=VIEWS.map(([k,l])=>`<button class="${k===VIEW?"on":""}" data-v="${k}"><span class="dot"></span>${l}${badge[k]!==""?`<span class="badge ${(k==="cat"&&nCat)||(k==="detail"&&nCek)?"warn":""}">${badge[k]}</span>`:""}</button>`).join("");
   $("snav").querySelectorAll("button").forEach(b=>b.onclick=()=>{VIEW=b.dataset.v;render();window.scrollTo({top:0})});
   $("kcard").innerHTML=(window.ONLINE?ONL.kartuKunci():"")+`<div class="kname">${esc(KUNCI_SRC)}</div><div class="ksub">Kunci ${esc(JA.label)}: ${KUNCI.length} berkas · sheet ${esc(KUNCI_SHEET||"–")}</div>${(KJ_META[JAKTIF]||{}).pinjam?`<div class="ksub" style="color:var(--amber)">Belum ada sheet khusus jabatan ini — sementara memakai kunci TerampilMahirPA.</div>`:""}<div class="kk">${KUNCI.map(k=>`<span class="tag">${esc(k.kk)}</span>`).join("")}</div><button class="btn sm" id="kUp"><span class="plus">+</span> Upload kunci jawaban</button><button class="btn sm ghost" id="kTpl" style="margin-top:6px">Unduh template kunci</button>`;
@@ -277,11 +288,11 @@ function render(){
 
   const [title,lead]=HEAD[VIEW];
   const da=hasil.length?hasil.reduce((a,h)=>a+h.rata,0)/hasil.length:null;
-  const compact=["fisik","detail","kunci","cat","tim"].includes(VIEW);
+  const compact=["fisik","detail","kunci","cat","tim","daftar"].includes(VIEW);
   let out=`<div class="eyebrow">Ujian praktik sertifikasi · ${esc(JA.label)}</div><h1 class="${compact?"sm":""}">${title}</h1><p class="lead ${compact?"sm":""}">${lead}</p>
   ${compact?"":`<div class="actions"><button class="btn" data-act="folder"><span class="plus">+</span> Muat folder jawaban</button><button class="btn" data-act="files"><span class="plus">+</span> Muat file</button><button class="btn" data-act="kunci"><span class="plus">+</span> Upload kunci jawaban</button></div>
   <div class="rule"></div>`}
-  ${VIEW==="fisik"||VIEW==="kunci"||VIEW==="cat"||VIEW==="tim"?"":`<div class="kpis">
+  ${VIEW==="fisik"||VIEW==="kunci"||VIEW==="cat"||VIEW==="tim"||VIEW==="daftar"?"":`<div class="kpis">
     <div class="kpi"><div class="kl"><span class="sq" style="background:var(--navy)"></span>Peserta dimuat</div><div class="kv">${hasil.length}</div><div class="ks">${esc(JA.label)} · DA ÷ ${JA.div}</div></div>
     <div class="kpi"><div class="kl"><span class="sq" style="background:var(--green)"></span>Rata-rata daftar arsip</div><div class="kv">${fmt(da)}</div><div class="ks">dinilai otomatis</div></div>
     <div class="kpi"><div class="kl"><span class="sq" style="background:var(--gold)"></span>Fisik selesai</div><div class="kv">${nFis}</div><div class="ks">${hasil.length?Math.round(100*nFis/hasil.length):0}% dari peserta</div></div>
@@ -291,7 +302,7 @@ function render(){
   $("main").innerHTML=out;
   $("main").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>({folder:()=>$("fDir").click(),files:()=>$("fFiles").click(),kunci:()=>$("fKunci").click()})[b.dataset.act]());
   const v=$("view");
-  ({muat:vMuat,rekap:vRekap,fisik:vFisik,detail:vDetail,kunci:vKunci,cat:vCat,tim:(v)=>ONL.vTim(v)})[VIEW](v,hasil,JA);
+  ({muat:vMuat,daftar:vDaftar,rekap:vRekap,fisik:vFisik,detail:vDetail,kunci:vKunci,cat:vCat,tim:(v)=>ONL.vTim(v)})[VIEW](v,hasil,JA);
 }
 
 function emptyState(v){
@@ -319,24 +330,28 @@ function vRekap(v,hasil){
   if(!hasil.length)return emptyState(v);
   const q=UI.q.toLowerCase();
   let rows=hasil.map(h=>({h,rf:rataFisik(h)})).map(o=>({...o,tot:o.rf===null?null:(o.rf+o.h.rata)/2}));
-  rows=rows.filter(o=>!q||o.h.nama.toLowerCase().includes(q)||o.h.file.toLowerCase().includes(q));
+  rows.forEach(o=>o.d=pesertaDari(o.h));
+  rows=rows.filter(o=>!q||o.h.nama.toLowerCase().includes(q)||o.h.file.toLowerCase().includes(q)||(o.d&&(o.d.nama+" "+o.d.instansi).toLowerCase().includes(q)));
+  const JENIS=[...new Set(DAFTAR.map(d=>d.jenis).filter(Boolean))];if(UI.fjenis&&UI.fjenis!=="semua")rows=rows.filter(o=>UI.fjenis==="—"?!o.d:o.d&&o.d.jenis===UI.fjenis);
   rows=rows.filter(o=>UI.filter==="semua"||(UI.filter==="fbelum"&&o.rf===null)||(UI.filter==="fsudah"&&o.rf!==null)||(UI.filter==="cek"&&perluCek(o.h)));
   const R=UI.rs,val=o=>R.k==="total"?(o.tot??-1):R.k==="da"?o.h.rata:R.k==="fisik"?(o.rf??-1):/^b\d$/.test(R.k)?(o.h.berkas[+R.k[1]]||{}).da??-1:0;
   rows.sort((a,b)=>R.k==="nama"?R.d*a.h.nama.localeCompare(b.h.nama):(R.d*(val(a)-val(b))||a.h.nama.localeCompare(b.h.nama)));
   const OPS=[["total:-1","Nilai total tertinggi"],["total:1","Nilai total terendah"],["da:-1","Nilai DA tertinggi"],["da:1","Nilai DA terendah"],["nama:1","Nama A–Z"],["nama:-1","Nama Z–A"]],cur=R.k+":"+R.d;
   v.innerHTML=`<div class="panel"><div class="toolbar">
     <div class="search">${ICON_SEARCH}<input id="q" placeholder="Cari nama peserta…" value="${esc(UI.q)}"></div>
+    ${JENIS.length?`<div class="field"><label>Jenis sertifikasi</label><select id="fjn">${[["semua","Semua jenis"],...JENIS.map(j=>[j,j]),["—","Tidak ada di daftar"]].map(([k,l])=>`<option value="${esc(k)}" ${(UI.fjenis||"semua")===k?"selected":""}>${esc(l)}</option>`).join("")}</select></div>`:""}
     <div class="field"><label>Status</label><select id="flt">${[["semua","Semua peserta"],["fbelum","Fisik belum dinilai"],["fsudah","Fisik selesai"],["cek","Perlu dicek"]].map(([k,l])=>`<option value="${k}" ${UI.filter===k?"selected":""}>${l}</option>`).join("")}</select></div>
     <div class="field"><label>Urutkan</label><select id="srt">${OPS.some(o=>o[0]===cur)?"":`<option selected>Sesuai kolom yang diklik</option>`}${OPS.map(([k,l])=>`<option value="${k}" ${cur===k?"selected":""}>${l}</option>`).join("")}</select></div>
     ${!window.ONLINE||ONL.admin?`<button class="btn danger" id="rstR" title="Hapus semua peserta ${esc(JAB[JAKTIF].label)} beserta nilai fisik, koreksi, dan tanda cek">Hapus semua peserta</button>`:""}
   </div>
   <div class="tw"><table><thead><tr><th class="n">No</th>${thSort(R,"nama","Peserta")}${KUNCI.map((k,i)=>thSort(R,"b"+i,`DA ${k.no}<div class="sub">${esc(k.kk)}</div>`,"n")).join("")}${thSort(R,"da","Rata DA","n")}${thSort(R,"fisik","Fisik","n")}${thSort(R,"total","Total","n")}<th>Status</th></tr></thead><tbody>
-  ${rows.map((o,i)=>`<tr><td class="n sub">${i+1}</td><td><span class="nm" data-k="${esc(fKey(o.h))}">${esc(o.h.nama)}</span>${!window.ONLINE||ONL.admin?`<button class="hpb" data-del="${esc(fKey(o.h))}" title="Hapus peserta ini (mis. salah upload)">Hapus</button>`:""}${o.h.catatan.length?`<div class="sub" style="color:var(--red)">${esc(o.h.catatan[0])}${o.h.catatan.length>1?` (+${o.h.catatan.length-1})`:""}</div>`:""}</td>
+  ${rows.map((o,i)=>`<tr><td class="n sub">${i+1}</td><td><span class="nm" data-k="${esc(fKey(o.h))}">${esc(o.d?o.d.nama:o.h.nama)}</span>${!window.ONLINE||ONL.admin?`<button class="hpb" data-del="${esc(fKey(o.h))}" title="Hapus peserta ini (mis. salah upload)">Hapus</button>`:""}${o.d?`<div class="sub">${esc([o.d.jenis,o.d.instansi].filter(Boolean).join(" · "))}${o.d.nama!==o.h.nama?` · file: ${esc(o.h.file)}`:""}</div>`:DAFTAR.length?`<div class="sub" style="color:var(--amber)">tidak ada di daftar peserta</div>`:""}${o.h.catatan.length?`<div class="sub" style="color:var(--red)">${esc(o.h.catatan[0])}${o.h.catatan.length>1?` (+${o.h.catatan.length-1})`:""}</div>`:""}</td>
     ${o.h.berkas.map(b=>`<td class="n"><span class="sc ${cls(b.da)}">${fmt(b.da)}</span></td>`).join("")}
     <td class="n big">${fmt(o.h.rata)}</td><td class="n">${o.rf===null?`<button class="btn sm ghost" data-f="${esc(fKey(o.h))}">Nilai fisik</button>`:fmt(o.rf)}</td><td class="n big">${fmt(o.tot)}</td>
     <td>${o.rf===null?'<span class="pill no">Fisik belum</span>':'<span class="pill ok">Lengkap</span>'} ${perluCek(o.h)?'<span class="pill warn">Perlu dicek</span>':""}</td></tr>`).join("")}
   </tbody></table>${rows.length?"":`<div class="empty">Tidak ada peserta yang cocok dengan filter.</div>`}</div>
   <div class="sub" style="margin-top:10px">${rows.length} dari ${hasil.length} peserta · klik nama untuk melihat rincian</div></div>`;
+  const fjn=$("fjn");if(fjn)fjn.onchange=e=>{UI.fjenis=e.target.value;render()};
   const qi=$("q");qi.oninput=()=>{UI.q=qi.value;const p=qi.selectionStart;render();const n=$("q");n.focus();n.setSelectionRange(p,p)};
   $("flt").onchange=e=>{UI.filter=e.target.value;render()};$("srt").onchange=e=>{const[k,d]=e.target.value.split(":");if(d){UI.rs={k,d:+d};render()}};pasangSort(v,UI.rs);const rr=$("rstR");if(rr)rr.onclick=kosongkanJabatan;
   v.querySelectorAll(".nm").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.k);UI.dq=h?h.nama:"";UI.donly=false;VIEW="detail";render();window.scrollTo({top:0})});
@@ -457,14 +472,14 @@ function unduh(){
       ...C.map(c=>b.D[c]),ff&&ff.selesai?ff.b[bi].cat:"",Object.entries(b.kor||{}).map(([c,k])=>`${c}: ${k.auto}→${k.v} (${k.alasan}; ${k.oleh})`).join(" | "),b.cek?b.cek.oleh+" "+fmtT(b.cek.t):""]);
   }));
   const nB=KUNCI.length;
-  const R=[["No","Nama","File","Jabatan","Rata-rata Fisik Berkas","Rata-rata Daftar Arsip","NILAI TOTAL","Status Fisik","Catatan"]];
+  const R=[["No","Nama","File","Jabatan","Rata-rata Fisik Berkas","Rata-rata Daftar Arsip","NILAI TOTAL","Status Fisik","Catatan","Nama (daftar)","NIP","Instansi","Jenis Sertifikasi","Tujuan Jabatan"]];
   hasil.slice().sort((a,b)=>b.rata-a.rata).forEach((h,i)=>{const x=i+2,rf=rataFisik(h);
     R.push([i+1,h.nama,h.file,JAB[h.jab].label,
       {t:"n",v:r2(rf||0),f:`SUMIFS(Penilaian!$I:$I,Penilaian!$B:$B,C${x})/${nB}`},
       {t:"n",v:r2(h.rata),f:`SUMIFS(Penilaian!$${cAK}:$${cAK},Penilaian!$B:$B,C${x})/${nB}`},
       {t:"n",v:r2(((rf||0)+h.rata)/2),f:`(E${x}+F${x})/2`},
       {t:"s",v:rf===null?"Fisik belum lengkap":"Lengkap",f:`IF(COUNTIFS(Penilaian!$B:$B,C${x},Penilaian!$F:$F,"<>")+COUNTIFS(Penilaian!$B:$B,C${x},Penilaian!$G:$G,"<>")+COUNTIFS(Penilaian!$B:$B,C${x},Penilaian!$H:$H,"<>")<${nB*3},"Fisik belum lengkap","Lengkap")`},
-      h.catatan.join("; ")]);
+      h.catatan.join("; "),...(d=>d?[d.nama,d.nip,d.instansi,d.jenis,d.tujuan]:["(tidak ada di daftar)","","","",""])(pesertaDari(h))]);
   });
   const K=[["No","KK","Indeks","Uraian Informasi Berkas","Unsur Uraian (penilaian Y)","Kurun","Jumlah","SKKA","Aktif","Inaktif","Nasib Akhir","Usul Pindah","Usul Musnah","Usul Serah"],
     ...KUNCI.map(k=>{const s=statusUsul(k);return[k.no,k.kk,k.indeks,k.uraian,k.unsur,k.kurun,k.jumlah,k.skka,k.aktif,k.inaktif,k.nasib,s.pindah?"Ya":"Tidak",s.musnah?"Ya":"Tidak",s.serah?"Ya":"Tidak"]})];
@@ -478,6 +493,9 @@ function unduh(){
   XLSX.utils.book_append_sheet(wb,ws1,"Rekap");XLSX.utils.book_append_sheet(wb,ws2,"Penilaian");
   XLSX.utils.book_append_sheet(wb,ws3,"Kunci");XLSX.utils.book_append_sheet(wb,ws4,"Rules");
   if(gagal.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([["File","Masalah"],...gagal]),"Gagal");
+  if(DAFTAR.length){const bm=DAFTAR.filter(d=>(d.jab===JAKTIF||!d.jab)&&!(d.file&&semua.some(h=>h.file===d.file)));
+    const ws5=XLSX.utils.aoa_to_sheet([["No","Nama","NIP","Instansi","Jenis Sertifikasi","Tujuan Jabatan"],...bm.map(d=>[d.no,d.nama,d.nip,d.instansi,d.jenis,d.tujuan])]);ws5["!cols"]=[{wch:5},{wch:36},{wch:22},{wch:36},{wch:26},{wch:24}];
+    XLSX.utils.book_append_sheet(wb,ws5,"Belum Mengumpulkan")}
   XLSX.writeFile(wb,"Penilaian_Ujian_Praktik_"+JA.label.replace(/[^A-Za-z]+/g,"_")+".xlsx");
   toast("Excel "+JA.label+" diunduh");
 }
@@ -486,20 +504,22 @@ function unduh(){
 $("fFiles").onchange=e=>{muat(e.target.files);e.target.value=""};
 $("fDir").onchange=e=>{muat(e.target.files);e.target.value=""};
 $("fKunci").onchange=e=>{if(e.target.files[0])muatKunci(e.target.files[0]);e.target.value=""};
+$("fDaftar").onchange=e=>{if(e.target.files[0])muatDaftar(e.target.files[0]);e.target.value=""};
 $("dl").onclick=unduh;
 $("fBak").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({versi:1,kunci:KUNCI_SRC,fisik:FISIK},null,1)],{type:"application/json"}));a.download="cadangan_nilai_fisik_"+new Date().toISOString().slice(0,16).replace(/[:T]/g,"-")+".json";a.click();toast("Cadangan nilai fisik diunduh")};
 $("fRes").onchange=async e=>{const fl=e.target.files[0];e.target.value="";if(!fl)return;try{const d=JSON.parse(await fl.text());const n=Object.keys(d.fisik||{}).length;Object.assign(FISIK,d.fisik||{});simpanFisik();render();toast(n+" nilai fisik dipulihkan dari cadangan")}catch(err){toast("Cadangan tidak terbaca: "+err.message)}};
 async function kosongkanJabatan(){const JA=JAB[JAKTIF];if(!confirmKosong(JA))return;if(window.ONLINE)await ONL.hapusPeserta(JAKTIF);
   Object.keys(VER).filter(k=>k.startsWith(JAKTIF+"|")).forEach(k=>delete VER[k]);Object.keys(FISIK).filter(k=>k.startsWith(JAKTIF+"|")).forEach(k=>delete FISIK[k]);
   if(!window.ONLINE){try{localStorage.setItem(VKEY,JSON.stringify(VER))}catch(e){}simpanFisik()}
-  semua=semua.filter(h=>h.jab!==JAKTIF);FSEL=null;render();toast("Semua peserta "+JA.label+" dihapus (termasuk nilai fisik, koreksi, dan tanda cek)")}
+  semua=semua.filter(h=>h.jab!==JAKTIF);FSEL=null;lepasYangHilang();render();toast("Semua peserta "+JA.label+" dihapus (termasuk nilai fisik, koreksi, dan tanda cek)")}
 function confirmKosong(JA){return window.confirm("Hapus semua peserta "+JA.label+(window.ONLINE?" untuk kunci ini dari server":"")+"? Nilai fisik, koreksi, dan tanda cek ikut terhapus.")}
 // hapus satu peserta (mis. salah upload) beserta nilai fisik, koreksi, dan tanda ceknya
 async function hapusPesertaSatu(h){
   if(!window.confirm("Hapus "+h.nama+" dari "+JAB[h.jab].label+"? Nilai fisik, koreksi, dan tanda ceknya ikut terhapus."))return;
   const k=fKey(h);if(window.ONLINE)await ONL.hapusSatu(h);
   delete VER[k];delete FISIK[k];if(!window.ONLINE){try{localStorage.setItem(VKEY,JSON.stringify(VER))}catch(e){}simpanFisik()}
-  semua=semua.filter(x=>fKey(x)!==k);if(FSEL===k)FSEL=null;render();toast(h.nama+" dihapus")}
+  semua=semua.filter(x=>fKey(x)!==k);if(FSEL===k)FSEL=null;lepasYangHilang();render();toast(h.nama+" dihapus")}
+function lepasYangHilang(){DAFTAR.filter(d=>d.file&&!semua.some(h=>h.file===d.file)).forEach(lepas)}
 // hapus koreksi & tanda cek untuk baris yang sedang tampil (ikut filter/pencarian)
 function hapusVerifikasi(rows){
   const target=rows.filter(o=>o.b.cek||Object.keys(o.b.kor||{}).length);
