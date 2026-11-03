@@ -11,14 +11,42 @@ const kunciJab=j=>(KJ&&KJ[j])||[];
 // Unsur uraian bawaan per kunci yang sudah direview tim (dicocokkan lewat KK + kata penanda di uraian/indeks).
 // UNSUR_PRESET: offline dari kunci_default.js, online dari tabel preset_unsur (setelah login).
 if(typeof UNSUR_PRESET==="undefined"){var UNSUR_PRESET=[];}
+// ---------- penyusun unsur uraian otomatis (untuk kunci baru) ----------
+// Pola uraian berkas: [Berkas] [kegiatan/tindakan] [PEMBEDA + objek] [sasaran orang] [di lingkungan/pada SUBJEK]
+// mis. "Berkas Rekomendasi kebutuhan JFA di lingkungan Kemenko Polhukam"
+//      → kegiatan: rekomendasi · pembeda: kebutuhan | formasi · objek: jabatan fungsional arsiparis · subjek: kemenko polhukam
+const KATA_TINDAKAN=/^(rekomendasi|permohonan|usulan|usul|pengajuan|laporan|penetapan|pemberian|pelaksanaan|penyelenggaraan|penyusunan|pengadaan|pembinaan|penghargaan|pengusulan|persetujuan|pengesahan|penerbitan|verifikasi|penilaian)$/;
+const SASARAN=/^(siswa|mahasiswa|pegawai|pejabat|peserta|pns|asn|calon|karyawan|arsiparis)$/;
+const PENANDA_SUBJEK=/^(di|pada|kepada|dari|oleh|atasnama|lingkungan|bpsdm|kementerian|kementrian|kemenko|kemenkes|kemen\w*|pemerintah|pemkab|pemprov|pemkot|politeknik|universitas|sekolah|smk\w*|sma\w*|provinsi|kabupaten|kota|direktorat|dit|sekretariat|badan|dinas|biro|pusat|pusdiklat|kantor|kejaksaan|kejati|kejari|kejagung|pengadilan|bkn)$/;
+const JENJANG=/^(ahli|pertama|muda|madya|utama|terampil|mahir|penyelia|pelaksana|lanjutan)$/;
+// tokenisasi untuk menyusun unsur: urutan & kata depan dipertahankan (tokens() membuang kata depan & kata ganda)
+function tokUrai(s){return String(s||"").toLowerCase().replace(/\b(smk|sma|smp|sd|man|mtsn?)\s*\.?\s*n\b\.?/g,"$1 negeri").replace(/\ba\s*\.\s*n\s*\.?|\ban\.\s/g," atasnama ").replace(/\([^)]*\)/g," ").replace(/[^a-z0-9]+/g," ").trim().split(/\s+/).filter(Boolean).flatMap(w=>ABBR[w]&&w!=="dit"?ABBR[w].split(" "):[w])}
+// frasa yang harus utuh sebagai pembeda, dan sinonim yang diterima
+const FRASA=[["kenaikan pangkat","kenaikan golongan"],["satya lancana"],["praktik kerja lapangan","pkl","magang","prakerin"],["magang","praktik kerja lapangan","prakerin"],["kebutuhan","formasi"],["formasi","kebutuhan"],["mutasi","perpindahan"],["pensiun","purna tugas"],["cuti"],["diklat","pelatihan","pendidikan pelatihan"],["pelatihan","diklat"]];
 function unsurBawaan(k){
   const p=UNSUR_PRESET.find(x=>x.kk===normKK(k.kk)&&x.cue.test(String(k.uraian||"")+" "+String(k.indeks||"")));if(p)return p.u;
-  // susun otomatis dari indeks: kata tindakan (rekomendasi/permohonan/usulan) = kegiatan; inti sebelum penanda subjek = pembeda; sisanya = subjek
-  let t=String(k.indeks||k.uraian).replace(/^\s*berkas\s+(tentang\s+)?/i,"");
-  const tind=t.match(/^\s*(rekomendasi|permohonan|usulan|pengajuan|laporan|penetapan|pemberian)\s+/i);if(tind)t=t.slice(tind[0].length);
-  const m=t.match(/^(.*?)\s+((di\s+lingkungan|di|pada|kepada|dari|a\.?\s?n\.?|siswa|mahasiswa|pegawai|bpsdm|kementerian|kemen\w*|pemerintah|politeknik|universitas|smk\w*|provinsi|kabupaten|kota|direktorat|dit\.?|sekretariat|badan|dinas)\b.*)$/i);
-  const keg=tokens(m?m[1]:t).filter(w=>w!=="berkas"),sub=m?tokens(m[2]).filter(w=>w!=="lingkungan"&&w!=="mahasiswa"&&w!=="siswa"&&w!=="pegawai"):[];
-  return "pembeda: "+keg.join(" ")+(tind?"\nkegiatan: "+tind[1].toLowerCase():"")+(sub.length?"\nsubjek: "+sub.join(" "):"");
+  // uraian lebih lengkap dari indeks; kata "berkas/tentang/perihal" dibuang
+  const W=tokUrai(String(k.uraian||k.indeks).replace(/^\s*berkas\s+(tentang|perihal|mengenai)?\s*/i,"")).filter(w=>!/^(berkas|tentang|perihal|mengenai|yang|bidang|dan|serta)$/.test(w));
+  let i=0;const keg=[];while(i<W.length&&KATA_TINDAKAN.test(W[i])&&i<W.length-1){keg.push(W[i]);i++}
+  // pembeda + objek sampai penanda sasaran/subjek
+  const inti=[];while(i<W.length&&!SASARAN.test(W[i])&&!PENANDA_SUBJEK.test(W[i])){inti.push(W[i]);i++}
+  if(!inti.length&&keg.length)inti.push(keg.pop());                // mis. "Penghargaan Satya…" tanpa inti → tindakan jadi pembeda
+  const sas=[];while(i<W.length&&(SASARAN.test(W[i])||sas.length&&JENJANG.test(W[i]))){sas.push(W[i]);i++}
+  const sub=[...new Set(W.slice(i).filter(w=>!/^(di|pada|kepada|dari|untuk|oleh|lingkungan|atasnama|ke)$/.test(w)))];
+  // pembeda = frasa pertama dari inti (1–3 kata yang dikenal), sisanya objek
+  let pb=null,sisa=inti;
+  for(const f of FRASA){const ft=f[0].split(" ");if(ft.every((w,j)=>inti[j]===w)){pb=f;sisa=inti.slice(ft.length);break}}
+  if(!pb&&inti.length){pb=[inti[0]];sisa=inti.slice(1)}
+  sisa=sisa.filter(w=>!/^(di|ke|dari|untuk)$/.test(w));
+  const baris=[];
+  if(pb)baris.push("pembeda: "+[...new Set(pb)].join(" | "));
+  if(keg.length)baris.push("kegiatan: "+keg.join(" "));
+  const obj=sisa.concat(sas);if(obj.length)baris.push("objek: "+obj.join(" "));
+  if(sub.length)baris.push("subjek: "+sub.join(" "));
+  // singkatan dalam kurung, mis. "(LP3K)", jadi sinonim unsur yang mendahuluinya
+  (String(k.uraian||"").match(/\(([A-Za-z0-9]{2,8})\)/g)||[]).map(x=>x.slice(1,-1).toLowerCase()).forEach(ak=>{
+    if(baris.some(b=>b.split(/[:|]/).some(t=>t.trim()===ak)))return;const i=baris.findIndex(b=>b.startsWith("objek:"));const j=i>=0?i:baris.findIndex(b=>b.startsWith("pembeda:"));if(j>=0)baris[j]+=" | "+ak});
+  return baris.join("\n")||"pembeda: "+W.slice(0,2).join(" ");
 }
 const kwKey=k=>"unsurUraian|"+k.kk+"|"+k.uraian;
 // HOOK: titik simpan. Versi offline = localStorage; versi online (online.js) menimpa dengan Supabase.

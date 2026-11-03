@@ -138,8 +138,8 @@ async function muat(list){
 var KUNCI_SHEET="",KUNCI_NOTES=[];
 function sinkronJabatan(){KUNCI=kunciJab(JAKTIF);const m=KJ_META[JAKTIF]||{};KUNCI_SHEET=m.sheet||"";KUNCI_NOTES=m.notes||[]}
 // Kolom kunci dicari dari teks judul (baris judul bisa 1–2 baris); kalau judul tidak dikenali, pakai posisi baku A–P.
-const KOLPOLA=[["unsurO",/unsur.*(kegiatan|inti)|kegiatan\s*\/\s*inti/i],["unsurP",/unsur.*subjek|subjek\s*wajib/i],["item",/item/i],["skka",/skka|keamanan/i],["kk",/kode\s*klasifikasi|\bkka\b/i],["indeks",/^indeks/i],["uraian",/uraian/i],["kurun",/kurun/i],["jumlah",/^jumlah/i],["inaktif",/in\s*-?\s*aktif/i],["aktif",/aktif/i],["nasib",/nasib|status\s*akhir|keterangan\s*akhir/i],["pindah",/pindah/i],["musnah",/musnah/i],["serah",/serah/i],["no",/^no\.?$/i]];
-const KOL_BAKU={no:0,kk:1,indeks:2,uraian:3,kurun:4,jumlah:5,skka:6,aktif:7,inaktif:8,nasib:9,pindah:10,musnah:11,serah:12,item:13,unsurO:14,unsurP:15};
+const KOLPOLA=[["uPembeda",/pembeda/i],["uKegiatan",/unsur.*kegiatan|^kegiatan\b/i],["uObjek",/unsur.*objek|^objek\b/i],["uSubjek",/unsur.*subjek|^subjek\b/i],["unsurO",/unsur.*(kegiatan|inti)|kegiatan\s*\/\s*inti/i],["unsurP",/unsur.*subjek|subjek\s*wajib/i],["item",/item/i],["skka",/skka|keamanan/i],["kk",/kode\s*klasifikasi|\bkka\b/i],["indeks",/^indeks/i],["uraian",/uraian/i],["kurun",/kurun/i],["jumlah",/^jumlah/i],["inaktif",/in\s*-?\s*aktif/i],["aktif",/aktif/i],["nasib",/nasib|status\s*akhir|keterangan\s*akhir/i],["pindah",/pindah/i],["musnah",/musnah/i],["serah",/serah/i],["no",/^no\.?$/i]];
+const KOL_BAKU={no:0,kk:1,indeks:2,uraian:3,kurun:4,jumlah:5,skka:6,aktif:7,inaktif:8,nasib:9,pindah:10,musnah:11,serah:12,item:13,uPembeda:14,uKegiatan:15,uObjek:16,uSubjek:17};
 function petaKolom(g){
   const isNo=v=>/^\d+$/.test(String(v??"").trim());
   for(let r=0;r<Math.min(g.length,12);r++){
@@ -165,7 +165,10 @@ function bacaSheetKunci(ws){
     if(!s(r,"kk")||!s(r,"uraian")){if(adaIsi)cacat.push({baris:r+1,no,msg:"baris "+(r+1)+": "+(!s(r,"kk")?"kode klasifikasi":"uraian")+" kosong, berkas ini dilewati"});continue}
     if(k.some(x=>x.no===no)){cacat.push({baris:r+1,no,msg:"baris "+(r+1)+": nomor berkas "+no+" dobel"});continue}
     const o={no,kk:s(r,"kk"),indeks:s(r,"indeks"),uraian:s(r,"uraian").replace(/\s+/g," "),kurun:s(r,"kurun"),jumlah:s(r,"jumlah"),skka:s(r,"skka").replace(/\s+/g," "),aktif:s(r,"aktif").replace(/\s+/g," "),inaktif:s(r,"inaktif").replace(/\s+/g," "),nasib:s(r,"nasib").replace(/\s+/g," "),pindah:s(r,"pindah"),musnah:s(r,"musnah"),serah:s(r,"serah"),itemKunci:s(r,"item"),baris:r+1};
-    const uO=s(r,"unsurO"),uP=s(r,"unsurP");if(uO){o.unsurSimpan="kegiatan: "+uO.replace(/\n+/g," | ")+(uP?"\nsubjek: "+uP.replace(/\n+/g," | "):"");o.unsurTemplate=true}
+    const L=[["pembeda",s(r,"uPembeda")],["kegiatan",s(r,"uKegiatan")],["objek",s(r,"uObjek")],["subjek",s(r,"uSubjek")]].filter(x=>x[1]);
+    const uO=s(r,"unsurO"),uP=s(r,"unsurP");
+    if(L.length){o.unsurSimpan=L.map(([l,v])=>l+": "+v.replace(/\n+/g," | ").replace(/\s*[;,]\s*/g," | ").toLowerCase()).join("\n");o.unsurTemplate=true}
+    else if(uO){o.unsurSimpan="kegiatan: "+uO.replace(/\n+/g," | ")+(uP?"\nsubjek: "+uP.replace(/\n+/g," | "):"");o.unsurTemplate=true}
     k.push(o);
   }
   const notes=[];
@@ -230,7 +233,7 @@ function dialogKunci(m,fname){
       <div class="mjab">${Object.keys(JAB_SHEET).map(j=>{const x=m.jab[j],v=V[j];return`<div class="mj ${v.E.length?"bad":v.W.length?"warn":"ok"}">
         <div class="mjh"><b>${esc(JAB[j].label)}</b><span class="pill ${v.E.length?"bad":v.W.length?"warn":"ok"}">${v.E.length?v.E.length+" kesalahan":v.W.length?v.W.length+" peringatan":"valid"}</span></div>
         <div class="sub">sheet ${esc(x.pinjam?(x.sheetKosong||JAB_SHEET[j].label+" (tidak ada)"):x.sheet)}${x.kolom&&!x.pinjam?` · kolom terbaca: KKA ${x.kolom.kk}, indeks ${x.kolom.indeks||"–"}, uraian ${x.kolom.uraian}, jumlah ${x.kolom.jumlah||"–"}, SKKA ${x.kolom.skka||"–"}${j!=="terampil"?`, retensi ${x.kolom.aktif||"–"}/${x.kolom.inaktif||"–"}, nasib ${x.kolom.nasib||"–"}`:""}`:""}</div>
-        ${x.pinjam?"":`<table class="mt"><tbody>${x.k.map(k=>`<tr><td><b>${k.no}</b></td><td><b>${esc(k.kk)}</b></td><td>${esc(k.uraian)}</td><td>${esc(k.jumlah)}</td><td>${esc(k.skka)}</td>${j!=="terampil"?`<td>${esc(k.aktif)} / ${esc(k.inaktif)}</td><td>${esc(k.nasib)}</td>`:""}</tr>`).join("")}</tbody></table>`}
+        ${x.pinjam?"":`<table class="mt"><tbody>${x.k.map(k=>`<tr><td><b>${k.no}</b></td><td><b>${esc(k.kk)}</b></td><td>${esc(k.uraian)}<div class="unsurp">${unsurChip(k.unsurSimpan||unsurBawaan(k))}<span class="sub">${k.unsurTemplate?"dari template":"disusun otomatis"}</span></div></td><td>${esc(k.jumlah)}</td><td>${esc(k.skka)}</td>${j!=="terampil"?`<td>${esc(k.aktif)} / ${esc(k.inaktif)}</td><td>${esc(k.nasib)}</td>`:""}</tr>`).join("")}</tbody></table>`}
         ${v.E.length?`<ul class="ml bad">${v.E.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}
         ${v.W.length?`<ul class="ml warn">${v.W.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}</div>`}).join("")}</div>
       <div class="mbar"><button class="btn ghost" data-t="tpl">Unduh template kunci</button><span style="flex:1"></span><button class="btn" data-t="batal">${nE?"Tutup":"Batal"}</button>${nE?"":`<button class="btn pri" data-t="ok">Pakai kunci ini</button>`}</div></div>`;
@@ -245,6 +248,8 @@ function dialogKunci(m,fname){
 }
 const TEMPLATE_KUNCI="/*TEMPLATE*/";
 function unduhTemplate(){const a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+TEMPLATE_KUNCI;a.download="Template_Kunci_Jawaban.xlsx";document.body.appendChild(a);a.click();a.remove();toast("Template kunci diunduh — isi tiga sheet jabatan lalu unggah lewat Upload kunci jawaban")}
+function unsurChip(t){return parseUnsurTeks(t).map(([l,v])=>`<span class="uc ${l}"><i>${esc(l)}</i>${esc(v)}</span>`).join("")}
+function parseUnsurTeks(t){return String(t||"").split(/\n+/).map(x=>x.match(/^([^:]+):(.*)$/)).filter(Boolean).map(m=>[m[1].trim().toLowerCase(),m[2].trim()])}
 function pasangKunciJab(jab){KJ={};KJ_META={};Object.keys(jab).forEach(j=>{KJ[j]=jab[j].k;KJ_META[j]={sheet:jab[j].sheet,notes:jab[j].notes||[],pinjam:!!jab[j].pinjam}});sinkronJabatan()}
 async function muatKunci(f){
   try{

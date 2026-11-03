@@ -28,8 +28,10 @@ KOL = [  # (kolom, judul, lebar, petunjuk)
     ("L", "Usul Musnah", 10, "Ya/Tidak. Kosongkan = otomatis (nasib akhir Musnah → Ya)."),
     ("M", "Usul Serah", 10, "Ya/Tidak. Kosongkan = otomatis (nasib akhir Permanen → Ya)."),
     ("N", "Uraian Item (opsional)", 26, "Daftar item isi berkas, satu per baris (Alt+Enter)."),
-    ("O", "Unsur Uraian: kegiatan/inti (opsional)", 30, "Kata inti yang WAJIB ada di uraian peserta. Sinonim dipisah |, mis. kenaikan pangkat | kenaikan golongan. Kosongkan = disusun otomatis dari indeks."),
-    ("P", "Unsur Uraian: subjek wajib (opsional)", 30, "Subjek/objek yang wajib ada (siapa/di mana), mis. melati putih berseri. Sinonim dipisah |."),
+    ("O", "Unsur: Pembeda (opsional)", 24, "Kata inti yang membedakan berkas. Tidak ada di jawaban → nilai uraian 20 (melenceng). Sinonim dipisah |, mis. kebutuhan | formasi. Kosongkan semua kolom O–R = disusun otomatis dari uraian."),
+    ("P", "Unsur: Kegiatan (opsional)", 18, "Jenis tindakan, mis. rekomendasi, permohonan, usulan, penghargaan. Kurang → −10."),
+    ("Q", "Unsur: Objek (opsional)", 22, "Yang diurus, mis. jabatan fungsional arsiparis, karya satya. Kurang → −10. Sinonim dipisah |."),
+    ("R", "Unsur: Subjek (opsional)", 26, "Siapa/di mana, mis. kemenko polhukam | kementerian koordinator politik hukum keamanan. Kurang sebagian −10, hilang −20."),
 ]
 JAB = [
     ("MasterPraktik_TerampilMahirPA", "Terampil / Mahir", "Dinilai: KKA, Uraian, Jumlah, SKKA (÷4). Kolom H–M tidak dinilai — boleh dikosongkan.", set("HIJKLM")),
@@ -60,7 +62,7 @@ for i, (t, f) in enumerate(rows, 1):
 ex_head = [k[1] for k in KOL]
 ex = ["2", "KP.05.00", "Kenaikan Pangkat Pegawai", "Berkas kenaikan pangkat pegawai a.n. Budi Contoh", "2019", "3 item/1 Folder/1 Berkas",
       "Terbatas", "1 Tahun setelah SK Ditetapkan", "2 Tahun", "Musnah, kecuali SK masuk berkas perseorangan", "", "", "",
-      "Surat usulan\nNota pertimbangan\nSK kenaikan pangkat", "kenaikan pangkat | kenaikan golongan", "budi contoh"]
+      "Surat usulan\nNota pertimbangan\nSK kenaikan pangkat", "kenaikan pangkat | kenaikan golongan", "", "pegawai", "budi contoh"]
 r0 = len(rows) + 1
 for j, (h, v) in enumerate(zip(ex_head, ex), 1):
     a = p.cell(row=r0, column=j, value=h); a.font = Font(bold=True, color="FFFFFF"); a.fill = PatternFill("solid", fgColor=NAVY); a.alignment = WRAP; a.border = BOX
@@ -75,7 +77,7 @@ p.cell(row=r, column=1, value="Aturan penilaian yang memakai kolom ini").font = 
 for t in ["Jumlah (F): jawaban peserta benar bila semua angka+satuannya ada di kunci (mis. 1 folder, 3 item, 1 berkas).",
           "Retensi (H/I): jangka waktu wajib sama; syarat ('setelah …') ditulis singkat atau lengkap nilainya sama; tanpa syarat → 50.",
           "Nasib akhir (J): jenis wajib sama; pengecualian ('kecuali …') ditulis singkat atau lengkap nilainya sama; tanpa pengecualian → 50.",
-          "Unsur uraian (O/P): kegiatan/inti salah → 20; subjek kurang sebagian 90, hilang 80. Bila dikosongkan, tool menyusunnya dari Indeks dan tim penilai perlu mengecek di menu Kunci & rules."]:
+          "Unsur uraian (O–R): pembeda tidak ada → 20 (melenceng); kegiatan/objek kurang → −10; subjek kurang sebagian −10, hilang −20; paling rendah 60. Bila O–R dikosongkan, tool menyusunnya otomatis dari uraian (pola: kegiatan + pembeda/objek + di lingkungan subjek) dan menampilkannya untuk dicek saat kunci diunggah."]:
     r += 1
     p.cell(row=r, column=1, value="• " + t)
 
