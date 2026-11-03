@@ -508,24 +508,57 @@ $("fDaftar").onchange=e=>{if(e.target.files[0])muatDaftar(e.target.files[0]);e.t
 $("dl").onclick=unduh;
 $("fBak").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({versi:1,kunci:KUNCI_SRC,fisik:FISIK},null,1)],{type:"application/json"}));a.download="cadangan_nilai_fisik_"+new Date().toISOString().slice(0,16).replace(/[:T]/g,"-")+".json";a.click();toast("Cadangan nilai fisik diunduh")};
 $("fRes").onchange=async e=>{const fl=e.target.files[0];e.target.value="";if(!fl)return;try{const d=JSON.parse(await fl.text());const n=Object.keys(d.fisik||{}).length;Object.assign(FISIK,d.fisik||{});simpanFisik();render();toast(n+" nilai fisik dipulihkan dari cadangan")}catch(err){toast("Cadangan tidak terbaca: "+err.message)}};
-async function kosongkanJabatan(){const JA=JAB[JAKTIF];if(!confirmKosong(JA))return;if(window.ONLINE)await ONL.hapusPeserta(JAKTIF);
+async function kosongkanJabatan(){const JA=JAB[JAKTIF];if(!await confirmKosong(JA))return;if(window.ONLINE)await ONL.hapusPeserta(JAKTIF);
   Object.keys(VER).filter(k=>k.startsWith(JAKTIF+"|")).forEach(k=>delete VER[k]);Object.keys(FISIK).filter(k=>k.startsWith(JAKTIF+"|")).forEach(k=>delete FISIK[k]);
   if(!window.ONLINE){try{localStorage.setItem(VKEY,JSON.stringify(VER))}catch(e){}simpanFisik()}
   semua=semua.filter(h=>h.jab!==JAKTIF);FSEL=null;lepasYangHilang();render();toast("Semua peserta "+JA.label+" dihapus (termasuk nilai fisik, koreksi, dan tanda cek)")}
-function confirmKosong(JA){return window.confirm("Hapus semua peserta "+JA.label+(window.ONLINE?" untuk kunci ini dari server":"")+"? Nilai fisik, koreksi, dan tanda cek ikut terhapus.")}
+// Jendela konfirmasi bergaya tool (pengganti confirm() bawaan browser). Hasil: Promise<boolean>
+const IKON={hapus:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/><path d="M10 11v6M14 11v6"/></svg>',
+  tanya:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.5"/></svg>'};
+function konfirmasi({judul,pesan,stat,catatan,ok="Ya, hapus",batal="Batal",jenis="hapus",ekstra}){
+  return new Promise(res=>{
+    const el=document.createElement("div");el.className="modal cf";
+    el.innerHTML=`<div class="cbox ${jenis}" role="alertdialog" aria-modal="true" aria-labelledby="cfJ">
+      <div class="cic">${IKON[jenis==="hapus"?"hapus":"tanya"]}</div>
+      <div class="eyebrow">${jenis==="hapus"?"Konfirmasi hapus":"Konfirmasi"}</div>
+      <h2 id="cfJ">${judul}</h2>${pesan?`<p class="cmsg">${pesan}</p>`:""}
+      ${stat&&stat.length?`<div class="cstat">${stat.map(([n,l])=>`<div><b>${n}</b><span>${esc(l)}</span></div>`).join("")}</div>`:""}
+      ${catatan?`<div class="cnote">${catatan}</div>`:""}
+      <div class="cbar">${ekstra?`<button class="btn ghost sm" data-t="x">${ekstra.label}</button>`:""}<span style="flex:1"></span><button class="btn" data-t="batal">${batal}</button><button class="btn ${jenis==="hapus"?"dangerf":"pri"}" data-t="ok">${ok}</button></div></div>`;
+    document.body.appendChild(el);requestAnimationFrame(()=>el.classList.add("in"));
+    const tutup=v=>{document.removeEventListener("keydown",kd);el.classList.remove("in");setTimeout(()=>el.remove(),140);res(v)};
+    const kd=e=>{if(e.key==="Escape")tutup(false)};document.addEventListener("keydown",kd);
+    el.onclick=e=>{if(e.target===el)tutup(false)};
+    el.querySelector("[data-t=batal]").onclick=()=>tutup(false);el.querySelector("[data-t=ok]").onclick=()=>tutup(true);
+    const x=el.querySelector("[data-t=x]");if(x)x.onclick=()=>ekstra.fn();
+    el.querySelector(jenis==="hapus"?"[data-t=batal]":"[data-t=ok]").focus();
+  });
+}
+function confirmKosong(JA){
+  const hs=semua.filter(h=>h.jab===JAKTIF),nF=hs.filter(h=>rataFisik(h)!==null).length,nK=hs.reduce((a,h)=>a+h.berkas.reduce((b,x)=>b+Object.keys(x.kor||{}).length,0),0),nC=hs.reduce((a,h)=>a+h.berkas.filter(x=>x.cek).length,0);
+  return konfirmasi({judul:`Hapus semua peserta <em>${esc(JA.label)}</em>?`,
+    pesan:`Semua file jawaban ${esc(JA.label)}${window.ONLINE?" pada kunci <b>"+esc(KUNCI_SRC)+"</b> dihapus dari server, untuk semua penilai":" dihapus dari tool ini"}.`,
+    stat:[[hs.length,"peserta"],[nF,"nilai fisik selesai"],[nK,"koreksi nilai"],[nC,"tanda sudah dicek"]],
+    catatan:"Tindakan ini tidak bisa dibatalkan. Unduh Excel lebih dulu bila hasilnya perlu diarsipkan.",
+    ok:"Ya, hapus semua",ekstra:hs.length?{label:"Unduh Excel dulu",fn:unduh}:null});
+}
 // hapus satu peserta (mis. salah upload) beserta nilai fisik, koreksi, dan tanda ceknya
 async function hapusPesertaSatu(h){
-  if(!window.confirm("Hapus "+h.nama+" dari "+JAB[h.jab].label+"? Nilai fisik, koreksi, dan tanda ceknya ikut terhapus."))return;
+  const d=typeof pesertaDari==="function"?pesertaDari(h):null;
+  if(!await konfirmasi({judul:`Hapus <em>${esc(d?d.nama:h.nama)}</em>?`,pesan:`File <b>${esc(h.file)}</b> dihapus dari ${esc(JAB[h.jab].label)}${d?" dan dilepas dari daftar peserta":""}. Pakai ini bila file salah unggah.`,
+    stat:[[fmt(h.rata),"nilai DA"],[rataFisik(h)===null?"–":fmt(rataFisik(h)),"nilai fisik"],[h.berkas.reduce((b,x)=>b+Object.keys(x.kor||{}).length,0),"koreksi"],[h.berkas.filter(x=>x.cek).length,"tanda cek"]],
+    catatan:"Tindakan ini tidak bisa dibatalkan.",ok:"Ya, hapus peserta"}))return;
   const k=fKey(h);if(window.ONLINE)await ONL.hapusSatu(h);
   delete VER[k];delete FISIK[k];if(!window.ONLINE){try{localStorage.setItem(VKEY,JSON.stringify(VER))}catch(e){}simpanFisik()}
   semua=semua.filter(x=>fKey(x)!==k);if(FSEL===k)FSEL=null;lepasYangHilang();render();toast(h.nama+" dihapus")}
 function lepasYangHilang(){DAFTAR.filter(d=>d.file&&!semua.some(h=>h.file===d.file)).forEach(lepas)}
 // hapus koreksi & tanda cek untuk baris yang sedang tampil (ikut filter/pencarian)
-function hapusVerifikasi(rows){
+async function hapusVerifikasi(rows){
   const target=rows.filter(o=>o.b.cek||Object.keys(o.b.kor||{}).length);
   if(!target.length){toast("Tidak ada koreksi atau tanda cek di baris yang tampil");return}
   const nK=target.reduce((a,o)=>a+Object.keys(o.b.kor||{}).length,0),nC=target.filter(o=>o.b.cek).length,orang=new Set(target.map(o=>fKey(o.h)));
-  if(!window.confirm(`Hapus ${nK} koreksi nilai dan ${nC} tanda sudah dicek dari ${orang.size} peserta (baris yang sedang tampil)? Nilai kembali ke hasil otomatis.`))return;
+  if(!await konfirmasi({judul:"Hapus koreksi &amp; <em>tanda cek</em>?",pesan:"Yang dihapus hanya baris yang sedang tampil (mengikuti filter dan pencarian). Nilai kembali ke hasil hitung otomatis.",
+    stat:[[nK,"koreksi nilai"],[nC,"tanda sudah dicek"],[orang.size,"peserta"]],ok:"Ya, hapus"}))return;
   const per={};target.forEach(o=>{(per[fKey(o.h)]=per[fKey(o.h)]||{h:o.h,no:[]}).no.push(o.b.no)});
   Object.values(per).forEach(({h,no})=>{const V=verGet(h);no.forEach(n=>{delete V.kor[n];delete V.cek[n]});verSimpan(h)});
   render();toast(`${nK} koreksi dan ${nC} tanda cek dihapus`)}

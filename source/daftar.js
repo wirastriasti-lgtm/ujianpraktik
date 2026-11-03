@@ -181,7 +181,7 @@ function vDaftar(v){
   const pf=$("pf");if(pf)pf.onchange=e=>{UI.pf=e.target.value;render()};
   const pj=$("pj");if(pj)pj.onchange=e=>{UI.pj=e.target.value;render()};
   v.querySelectorAll("[data-lepas]").forEach(b=>b.onclick=()=>{const d=DAFTAR.find(x=>x.id===b.dataset.lepas);lepas(d);render();toast("Hubungan "+d.nama+" dilepas")});
-  v.querySelectorAll("select[data-link]").forEach(s=>s.onchange=()=>{const d=DAFTAR.find(x=>x.id===s.dataset.link),h=semua.find(x=>fKey(x)===s.value);if(!d||!h)return;
-    if(d.jab&&d.jab!==h.jab&&!confirm(`${d.nama} terdaftar sebagai ${JAB[d.jab].label}, tetapi file ini dinilai sebagai ${JAB[h.jab].label}. Tetap hubungkan?`)){render();return}
+  v.querySelectorAll("select[data-link]").forEach(s=>s.onchange=async()=>{const d=DAFTAR.find(x=>x.id===s.dataset.link),h=semua.find(x=>fKey(x)===s.value);if(!d||!h)return;
+    if(d.jab&&d.jab!==h.jab&&!await konfirmasi({jenis:"tanya",judul:"Jabatan <em>tidak sama</em>",pesan:`<b>${esc(d.nama)}</b> terdaftar sebagai ${esc(JAB[d.jab].label)}, tetapi file <b>${esc(h.file)}</b> dinilai sebagai ${esc(JAB[h.jab].label)}. Tetap hubungkan?`,ok:"Tetap hubungkan"})){render();return}
     hubungkan(d,h.file,h.jab);render();toast(h.file+" → "+d.nama)});
 }

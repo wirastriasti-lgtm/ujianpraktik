@@ -246,7 +246,7 @@ const ONL={
     if(f)f.onsubmit=async ev=>{ev.preventDefault();const em=document.getElementById("tE").value.trim().toLowerCase();
       const{error}=await this.sb.from("penilai").insert({email:em,nama:document.getElementById("tN").value.trim()||null,peran:document.getElementById("tR").value});
       if(error)toast(/duplicate/i.test(error.message)?"Email sudah terdaftar":error.message);else{toast(em+" ditambahkan");this.vTim(v)}};
-    v.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(!confirm("Hapus "+b.dataset.del+" dari tim penilai?"))return;
+    v.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(!await konfirmasi({judul:`Hapus <em>${esc(b.dataset.del)}</em> dari tim penilai?`,pesan:"Akun ini tidak bisa lagi membuka data penilaian. Nilai yang sudah ia masukkan tetap tersimpan.",ok:"Ya, hapus penilai"}))return;
       const{error}=await this.sb.from("penilai").delete().eq("email",b.dataset.del);if(error)toast(error.message);else this.vTim(v)});
   }
 };
