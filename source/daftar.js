@@ -70,8 +70,8 @@ function bacaIdentitas(wb){
   const out={};
   for(const sn of wb.SheetNames.slice(0,4)){const g=grid(wb.Sheets[sn]);
     for(let r=0;r<Math.min(g.length,12);r++)(g[r]||[]).forEach((v,c)=>{const t=String(v??"").trim();
-      const m=t.match(/^(nama(\s*peserta)?|nip|instansi|unit\s*kerja)\s*:?\s*(.*)$/i);if(!m)return;
-      let val=m[3].replace(/^:\s*/,"").trim();if(!val){for(let k=c+1;k<Math.min(c+5,(g[r]||[]).length);k++){const x=String(g[r][k]??"").replace(/^:\s*/,"").trim();if(x&&x!==":"){val=x;break}}}
+      const m=t.match(/^(nama(\s*(lengkap|peserta))?|nip|instansi)\s*(:\s*(.*))?$/i);if(!m)return;
+      let val=(m[5]||"").trim();if(!val){for(let k=c+1;k<Math.min(c+5,(g[r]||[]).length);k++){const x=String(g[r][k]??"").replace(/^:\s*/,"").trim();if(x&&x!==":"){val=x;break}}}
       const key=/^nama/i.test(m[1])?"nama":/^nip/i.test(m[1])?"nip":"instansi";if(val&&!out[key])out[key]=val})}
   return out;
 }

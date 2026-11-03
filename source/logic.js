@@ -206,7 +206,7 @@ function kolom(g,hr,re,startCol=0){for(const r of [hr,hr+1])if(g[r])for(let c=st
 function bacaDaftarBerkas(g){
   const h=cariHeader(g,/kode\s*klasifikasi/i);if(!h)return null;
   const hr=h[0];
-  const col={kk:h[1],uraian:kolom(g,hr,/uraian/i),jumlah:kolom(g,hr,/^jumlah/i),skka:kolom(g,hr,/keamanan/i),
+  const col={kk:h[1],indeks:kolom(g,hr,/^indeks/i),uraian:kolom(g,hr,/uraian/i),jumlah:kolom(g,hr,/^jumlah/i),skka:kolom(g,hr,/keamanan/i),
     aktif:kolom(g,hr,/^(retensi\s*)?(arsip\s*)?(jra\s*)?aktif$/i),inaktif:kolom(g,hr,/^(retensi\s*)?(arsip\s*)?(jra\s*)?in\s*-?\s*aktif$/i),nasib:kolom(g,hr,/nasib|keterangan\s*akhir|status\s*akhir/i)};
   const rows=[];let kosong=0;
   for(let r=hr+1;r<g.length&&kosong<5;r++){
@@ -244,15 +244,18 @@ function namaDariFile(f){return f.replace(/\.[^.]+$/,"").replace(/^daftar[_\s-]*
 //     supaya salah tulis kode (mis. KP.05.00 untuk KP.09.05) tidak membuat seluruh berkas dianggap "tidak membuat".
 function padankanBerkas(db,KUNCI){
   const out=KUNCI.map(()=>({idx:-1,cara:"tidak ditemukan"})),used=new Set();
+  // 1) kode sama persis
   KUNCI.forEach((k,ki)=>{const i=db.findIndex((r,j)=>!used.has(j)&&normKK(r.kk)===normKK(k.kk));if(i>=0){out[ki]={idx:i,cara:"kode sama"};used.add(i)}});
   const isi=r=>String(r.kk||"").trim()||String(r.uraian||"").trim();
-  const pas=[];KUNCI.forEach((k,ki)=>{if(out[ki].idx>=0)return;const K=tokens(k.uraian+" "+k.indeks).filter(w=>w!=="berkas");
-    db.forEach((r,i)=>{if(used.has(i)||!isi(r))return;const sc=tokens(r.uraian).filter(w=>K.some(x=>mirip(w,x))).length;if(sc>=2)pas.push({ki,i,sc})})});
-  pas.sort((a,b)=>b.sc-a.sc||Math.abs(a.ki-a.i)-Math.abs(b.ki-b.i)).forEach(x=>{if(out[x.ki].idx<0&&!used.has(x.i)){out[x.ki]={idx:x.i,cara:"dipadankan lewat uraian"};used.add(x.i)}});
-  const sisaK=KUNCI.map((k,ki)=>ki).filter(ki=>out[ki].idx<0),sisaB=db.map((r,i)=>i).filter(i=>!used.has(i)&&isi(db[i]));
-  sisaK.forEach(ki=>{if(!sisaB.length)return;const pk=normKK(KUNCI[ki].kk).split(".")[0];
-    let pick=sisaB.find(i=>normKK(db[i].kk).split(".")[0]===pk);if(pick===undefined)pick=sisaB[0];
-    sisaB.splice(sisaB.indexOf(pick),1);out[ki]={idx:pick,cara:"dipadankan dari sisa baris (kode "+(db[pick].kk||"kosong")+")"}});
+  // 2–3) sisa: skor kecocokan tiap pasangan (kata pembeda di uraian, kata sama, kode primer sama, posisi), pasangan terkuat dipilih lebih dulu
+  const pembedaAda=(k,teks)=>{const U=parseUnsur(k.unsur||k.unsurSimpan||"").filter(u=>u.label.toLowerCase()==="pembeda");if(!U.length)return false;const J=tokens(teks);return U.every(u=>u.alts.some(a=>a.every(w=>J.some(x=>mirip(w,x)))))};
+  const pas=[];
+  KUNCI.forEach((k,ki)=>{if(out[ki].idx>=0)return;const K=tokens(k.uraian+" "+k.indeks).filter(w=>w!=="berkas");const pk=normKK(k.kk).split(".")[0];
+    db.forEach((r,i)=>{if(used.has(i)||!isi(r))return;const teks=(r.uraian||"")+" "+(r.indeks||"");
+      const kata=tokens(teks).filter(w=>w!=="berkas"&&K.some(x=>mirip(w,x))).length,pb=pembedaAda(k,teks),primer=normKK(r.kk).split(".")[0]===pk;
+      pas.push({ki,i,sc:kata+(pb?4:0)+(primer?3:0)-Math.abs(ki-i)*0.1,lewat:pb||kata>=2?"uraian":"sisa"})})});
+  pas.sort((a,b)=>b.sc-a.sc).forEach(x=>{if(out[x.ki].idx<0&&!used.has(x.i)){used.add(x.i);
+    out[x.ki]={idx:x.i,cara:x.lewat==="uraian"?"dipadankan lewat uraian (kode "+(db[x.i].kk||"kosong")+")":"dipadankan dari sisa baris (kode "+(db[x.i].kk||"kosong")+")"}}});
   return out;
 }
 // parseWb: baca isi file jawaban jadi data polos (bisa disimpan sebagai JSON / dikirim ke Supabase)
