@@ -770,10 +770,11 @@ function nilaiNasib(j,k){ // inti = jenis nasib akhir; unsur = pengecualian ("ke
   return s.ada?[100,"benar"]:[NILAI_KET_KURANG,"jenis benar, pengecualian tidak ada (kecuali "+m[1].trim()+")"];
 }
 function nilaiUsul(adaSheet,row,seharusnya,k,jenis){
+  // usul yang tidak berlaku untuk berkas ini (mis. usul serah untuk berkas bernasib akhir musnah) otomatis 100,
+  // kecuali peserta keliru mencantumkannya (mis. berkas permanen diusulkan musnah) → 20
+  if(!seharusnya)return row?[20,"seharusnya tidak dicantumkan"]:[100,"tidak berlaku untuk berkas ini (otomatis 100)"];
   if(!adaSheet)return[20,"sheet tidak dibuat"];
-  const masuk=!!row;
-  if(masuk!==seharusnya)return[20,seharusnya?"seharusnya dicantumkan":"seharusnya tidak dicantumkan"];
-  if(!seharusnya)return[100,"tidak dicantumkan (benar)"];
+  if(!row)return[20,"seharusnya dicantumkan"];
   // berkas tepat → isi baris dibandingkan dengan kunci
   const cek=[];
   // uraian & SKKA tidak dinilai ulang di daftar usul (sudah dinilai di DAFTAR BERKAS), supaya satu kesalahan tidak terhitung berkali-kali
@@ -909,7 +910,7 @@ const RULES_TXT=[
  "<b>AB SKKA</b> (tanpa notes): dibandingkan per tingkat (Sangat Rahasia, Rahasia, Terbatas, Biasa/Terbuka); 100 tingkat sama; 20 salah/tidak membuat.",
  "<b>AC/AD Retensi aktif/inaktif</b>: inti = jangka waktu (angka + tahun/bulan) harus sama dengan kunci, salah atau tidak membuat → 20. Bila kunci memuat keterangan syarat (mis. 'setelah SK ditetapkan'): keterangan ada → 100, ditulis singkat atau lengkap nilainya sama (mis. '1 thn stlh SK' = '1 Tahun setelah SK Ditetapkan'); keterangan tidak ada → 50 (mengikuti form penilaian manual).",
  "<b>AE Nasib akhir</b>: inti = jenis nasib akhir (musnah / permanen / dinilai kembali; 'diserahkan' = permanen) harus sesuai kunci, salah atau tidak membuat → 20. Bila kunci memuat pengecualian ('kecuali …'): pengecualian ada → 100, ditulis singkat atau lengkap nilainya sama (mis. 'Musnah kecuali SK' = 'Musnah, kecuali SK masuk berkas perseorangan'); pengecualian tidak ada → 50 (mengikuti form penilaian manual).",
- "<b>AH/AI/AJ Usul pindah/musnah/serah</b> (Ahli Muda): inti = ketepatan berkas (dicantumkan bila seharusnya diusulkan, tidak dicantumkan bila tidak); keliru atau sheet tidak dibuat → 20; tidak dicantumkan dengan benar → 100. Bila berkas tepat dicantumkan, isi barisnya dicek dan dirata-rata: usul pindah = tahun, jumlah · usul musnah = tahun, jumlah, retensi aktif/inaktif, nasib akhir · usul serah = tahun, jumlah, nasib akhir. Uraian dan SKKA tidak dinilai ulang di daftar usul karena sudah dinilai di Daftar Berkas. Kunci: semua berkas usul pindah; nasib akhir 'Musnah' → usul musnah; 'Permanen' → usul serah (kolom K–M master dipakai bila diisi).",
+ "<b>AH/AI/AJ Usul pindah/musnah/serah</b> (Ahli Muda): usul yang <b>tidak berlaku</b> untuk suatu berkas otomatis 100 (mis. nasib akhir musnah → usul serah 100; nasib akhir permanen → usul musnah 100), kecuali peserta keliru mencantumkannya → 20. Usul yang berlaku: tidak dicantumkan atau sheet tidak dibuat → 20; dicantumkan → isi barisnya dicek dan dirata-rata (pindah = tahun, jumlah · musnah = tahun, jumlah, retensi aktif/inaktif, nasib akhir · serah = tahun, jumlah, nasib akhir). Uraian dan SKKA tidak dinilai ulang di daftar usul. Kunci: semua berkas usul pindah; nasib akhir 'Musnah…' → usul musnah; 'Permanen' → usul serah (kolom K–M master/template dipakai bila diisi).",
  "<b>Koreksi penilai</b>: nilai otomatis bisa dikoreksi per sel di menu Rincian per berkas (wajib dengan alasan). Nilai koreksi menggantikan nilai otomatis dalam perhitungan DA dan tercatat di Excel (kolom Koreksi Penilai: nilai otomatis → koreksi, alasan, penilai).",
  "<b>Nilai DA per berkas</b> = jumlah komponen ÷ pembagi master (Terampil/Mahir: X,Y,Z,AB ÷ 4 · Penyelia/Pertama: + AC,AD,AE ÷ 7 · Muda: + AH,AI,AJ ÷ 10). Rata-rata DA = jumlah 4 berkas ÷ 4.",
  "<b>Fisik berkas</b> (notes + praktik penilai, diisi di menu Penilaian fisik): R guide primer, sekunder, tersier + folder = 25 per bagian benar, 12,5 bila ada tapi kurang tepat, 0 bila tidak ada; semua tidak ada → 20. S indeks/folder = 100 benar, 60 kurang lengkap, 20 salah/tidak membuat. T item di dalam folder = 100 × item benar ÷ jumlah item kunci (3 item → 33,33 per item), 0 → 20. Nilai fisik berkas = (R+S+T) ÷ 3; rata-rata fisik = jumlah 4 berkas ÷ 4. Nilai total = (rata-rata fisik + rata-rata DA) ÷ 2."

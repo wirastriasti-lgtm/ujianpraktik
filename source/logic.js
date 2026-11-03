@@ -176,10 +176,11 @@ function nilaiNasib(j,k){ // inti = jenis nasib akhir; unsur = pengecualian ("ke
   return s.ada?[100,"benar"]:[NILAI_KET_KURANG,"jenis benar, pengecualian tidak ada (kecuali "+m[1].trim()+")"];
 }
 function nilaiUsul(adaSheet,row,seharusnya,k,jenis){
+  // usul yang tidak berlaku untuk berkas ini (mis. usul serah untuk berkas bernasib akhir musnah) otomatis 100,
+  // kecuali peserta keliru mencantumkannya (mis. berkas permanen diusulkan musnah) → 20
+  if(!seharusnya)return row?[20,"seharusnya tidak dicantumkan"]:[100,"tidak berlaku untuk berkas ini (otomatis 100)"];
   if(!adaSheet)return[20,"sheet tidak dibuat"];
-  const masuk=!!row;
-  if(masuk!==seharusnya)return[20,seharusnya?"seharusnya dicantumkan":"seharusnya tidak dicantumkan"];
-  if(!seharusnya)return[100,"tidak dicantumkan (benar)"];
+  if(!row)return[20,"seharusnya dicantumkan"];
   // berkas tepat → isi baris dibandingkan dengan kunci
   const cek=[];
   // uraian & SKKA tidak dinilai ulang di daftar usul (sudah dinilai di DAFTAR BERKAS), supaya satu kesalahan tidak terhitung berkali-kali
