@@ -585,11 +585,12 @@ const kunciJab=j=>(KJ&&KJ[j])||[];
 if(typeof UNSUR_PRESET==="undefined"){var UNSUR_PRESET=[];}
 function unsurBawaan(k){
   const p=UNSUR_PRESET.find(x=>x.kk===normKK(k.kk)&&x.cue.test(String(k.uraian||"")+" "+String(k.indeks||"")));if(p)return p.u;
-  // pecah indeks: kata sebelum penanda subjek = kegiatan; sisanya = subjek/objek
-  const t=String(k.indeks||k.uraian).replace(/^\s*berkas\s+(tentang\s+)?/i,"").replace(/^\s*(rekomendasi|permohonan|usulan)\s+/i,"");
+  // susun otomatis dari indeks: kata tindakan (rekomendasi/permohonan/usulan) = kegiatan; inti sebelum penanda subjek = pembeda; sisanya = subjek
+  let t=String(k.indeks||k.uraian).replace(/^\s*berkas\s+(tentang\s+)?/i,"");
+  const tind=t.match(/^\s*(rekomendasi|permohonan|usulan|pengajuan|laporan|penetapan|pemberian)\s+/i);if(tind)t=t.slice(tind[0].length);
   const m=t.match(/^(.*?)\s+((di\s+lingkungan|di|pada|kepada|dari|a\.?\s?n\.?|siswa|mahasiswa|pegawai|bpsdm|kementerian|kemen\w*|pemerintah|politeknik|universitas|smk\w*|provinsi|kabupaten|kota|direktorat|dit\.?|sekretariat|badan|dinas)\b.*)$/i);
   const keg=tokens(m?m[1]:t).filter(w=>w!=="berkas"),sub=m?tokens(m[2]).filter(w=>w!=="lingkungan"&&w!=="mahasiswa"&&w!=="siswa"&&w!=="pegawai"):[];
-  return "kegiatan: "+keg.join(" ")+(sub.length?"\nsubjek: "+sub.join(" "):"");
+  return "pembeda: "+keg.join(" ")+(tind?"\nkegiatan: "+tind[1].toLowerCase():"")+(sub.length?"\nsubjek: "+sub.join(" "):"");
 }
 const kwKey=k=>"unsurUraian|"+k.kk+"|"+k.uraian;
 // HOOK: titik simpan. Versi offline = localStorage; versi online (online.js) menimpa dengan Supabase.
@@ -636,13 +637,27 @@ function nilaiKK(j,k){ // 33 per level; 100 benar; 20 salah
   let n=0;for(let i=0;i<3;i++)if(a[i]&&a[i]===b[i])n++;
   return n===3?[100,"benar"]:n===0?[20,"salah"]:[33*n,n+" level benar"];
 }
-function nilaiUraian(j,unsurTxt){ // pola: kegiatan (inti) + subjek/objek; skala notes 100/90/80/70/60/20
+// Uraian informasi berkas, dinilai per unsur pola kalimat (format uraian berkas / SPOK):
+//   pembeda  = kata inti yang membedakan berkas ini (mis. "kebutuhan" pada berkas rekomendasi kebutuhan JFA). Tidak ada → 20 (melenceng).
+//   kegiatan = jenis tindakan (rekomendasi, permohonan, usulan, penghargaan…) · objek = yang diurus · subjek = siapa/di mana.
+//   Tiap unsur yang kurang mengurangi nilai: kegiatan/objek −10, subjek kurang sebagian −10, subjek hilang −20; paling rendah 60.
+//   Bila unsur "pembeda" tidak ditulis, dipakai pola lama: baris pertama = inti (hilang → 20), unsur lain kurang sebagian −10 / hilang −20.
+function nilaiUraian(j,unsurTxt){
   const J=tokens(j);
   if(!J.length)return[20,"tidak membuat",[]];
   const U=parseUnsur(unsurTxt);if(!U.length)return[100,"unsur kunci belum diisi",[]];
   const hasil=U.map((u,i)=>{let best=null;u.alts.forEach(a=>{const ada=a.filter(w=>J.some(x=>mirip(w,x)));const r=ada.length/a.length;if(!best||r>best.r)best={r,kurang:a.filter(w=>!ada.includes(w))}});
-    const st=best.r===1?"lengkap":best.r>=0.5?"kurang sebagian":"hilang";return{label:u.label,st,kurang:best.kurang,inti:i===0}});
+    const st=best.r===1?"lengkap":best.r>=0.5?"kurang sebagian":"hilang";return{label:u.label.toLowerCase(),st,kurang:best.kurang,inti:i===0}});
   const kurang=hasil.filter(x=>x.st!=="lengkap").flatMap(x=>x.kurang);
+  const pemb=hasil.filter(x=>x.label==="pembeda");
+  if(pemb.length){
+    const gagal=pemb.find(x=>x.st!=="lengkap");
+    if(gagal)return[20,"melenceng (kata pembeda \""+gagal.kurang.join(" ")+"\" tidak ada)",kurang];
+    const lain=hasil.filter(x=>x.label!=="pembeda"&&x.st!=="lengkap");
+    const pot=lain.reduce((a,x)=>a+(x.label==="subjek"&&x.st==="hilang"?20:10),0);
+    const n=Math.max(60,100-pot);
+    return[n,n===100?"semua unsur lengkap":lain.map(x=>x.label+" "+x.st+" ("+x.kurang.join(", ")+")").join("; "),kurang];
+  }
   const ket=hasil.filter(x=>x.st!=="lengkap").map(x=>x.label+" "+x.st).join("; ");
   if(hasil[0].st==="hilang")return[20,"salah ("+hasil[0].label+" tidak sesuai)",kurang];
   const pot=hasil.reduce((a,x)=>a+(x.st==="hilang"?20:x.st==="kurang sebagian"?10:0),0);
@@ -823,7 +838,7 @@ function nilaiParsed(p,file,jabKey){
 
 const RULES_TXT=[
  "<b>X Kode Klasifikasi</b> (notes): 100 benar; 33 per level benar (primer, sekunder, tersier); 20 salah/tidak membuat.",
- "<b>Y Uraian Informasi Berkas</b>: dinilai per unsur pola kalimat, bukan per kata. Unsur 1 = kegiatan/masalah (inti), unsur berikutnya = subjek/objek wajib (siapa/di mana). Kata pelengkap (berkas, permohonan, rekomendasi, tahun) tidak memotong nilai. Semua unsur lengkap 100; satu unsur kurang sebagian 90; satu unsur hilang 80; hilang + kurang sebagian 70; lebih dari itu 60; kegiatan/inti salah atau tidak membuat 20. Sinonim & singkatan (PKL, JFA, SMKN, Kab., Prov., Jateng) disamakan; salah ketik 1 huruf ditoleransi.",
+ "<b>Y Uraian Informasi Berkas</b>: dinilai per unsur pola kalimat uraian berkas (mirip SPOK), tidak bergantung pada benar/salahnya kode klasifikasi. <b>Pembeda</b> = kata inti yang membedakan berkas (mis. 'kebutuhan' pada berkas rekomendasi kebutuhan JFA): tidak ada atau diganti → 20 (melenceng), walaupun subjeknya benar. Bila pembeda ada, mulai dari 100 lalu dikurangi untuk tiap unsur yang kurang: <b>kegiatan</b> (rekomendasi, permohonan, usulan, penghargaan, …) −10, <b>objek</b> −10, <b>subjek</b>/lokasi kurang sebagian −10 atau hilang −20; paling rendah 60. Kata pelengkap (berkas, tentang, di lingkungan, bidang) tidak dinilai. Sinonim & singkatan (PKL, JFA, Kemenko, Polhukam, SDMKS, Jatim, Kab., Prov.) dan kata tambahan yang tidak salah (mis. 'formasi') tidak mengurangi nilai; salah ketik 1 huruf ditoleransi.",
  "<b>Z Jumlah</b>: 100 jika jawaban sama dengan kunci kolom F, atau memilih satuan yang ada di kunci (mis. 1 folder, 3 item, 1 berkas — boleh satu atau beberapa); 20 jika ada satu saja angka/satuan yang tidak sesuai kunci (mis. 2 item, 3 lembar), atau tidak membuat.",
  "<b>AB SKKA</b> (tanpa notes): dibandingkan per tingkat (Sangat Rahasia, Rahasia, Terbatas, Biasa/Terbuka); 100 tingkat sama; 20 salah/tidak membuat.",
  "<b>AC/AD Retensi aktif/inaktif</b>: inti = jangka waktu (angka + tahun/bulan) harus sama dengan kunci, salah atau tidak membuat → 20. Bila kunci memuat keterangan syarat (mis. 'setelah SK ditetapkan'): keterangan ada → 100, ditulis singkat atau lengkap nilainya sama (mis. '1 thn stlh SK' = '1 Tahun setelah SK Ditetapkan'); keterangan tidak ada → 50 (mengikuti form penilaian manual).",
@@ -1457,7 +1472,7 @@ document.addEventListener("keydown",e=>{if(VIEW!=="fisik"||/INPUT|TEXTAREA|SELEC
 
 function vKunci(v){
   if(!KUNCI.length){v.innerHTML=`<div class="panel"><div class="empty"><h3>Belum ada kunci jawaban</h3><div>${window.ONLINE&&!ONL.admin?"Minta admin mengunggah file master angkatan.":"Upload file master angkatan atau template kunci yang sudah diisi."}</div><div style="margin-top:16px"><button class="btn" onclick="unduhTemplate()">Unduh template kunci</button></div></div></div>`;return}
-  v.innerHTML=`<div class="panel"><p class="sub" style="margin:0 0 12px">Kunci <b>${esc(JAB[JAKTIF].label)}</b> · sumber <b>${esc(KUNCI_SRC)}</b> · sheet <b>${esc(KUNCI_SHEET||"–")}</b> · baris kunci ${KUNCI.map(k=>k.baris||"").filter(Boolean).join(", ")||"5, 8, 11, 14"} · kolom A–N. Parameter jumlah diambil dari kolom F: peserta boleh menulis satu atau beberapa satuan yang ada di kunci.</p><div class="tw kt" style="max-height:none"><table><thead><tr><th>No</th><th>KKA</th><th>Uraian informasi berkas</th><th>Unsur uraian <div class="sub">baris 1 kegiatan/inti · berikutnya subjek wajib · sinonim pakai |</div></th><th>Jumlah <div class="sub">parameter diterima</div></th><th>SKKA</th><th>Retensi aktif / inaktif</th><th>Nasib akhir</th><th>Usul</th></tr></thead><tbody>
+  v.innerHTML=`<div class="panel"><p class="sub" style="margin:0 0 12px">Kunci <b>${esc(JAB[JAKTIF].label)}</b> · sumber <b>${esc(KUNCI_SRC)}</b> · sheet <b>${esc(KUNCI_SHEET||"–")}</b> · baris kunci ${KUNCI.map(k=>k.baris||"").filter(Boolean).join(", ")||"5, 8, 11, 14"} · kolom A–N. Parameter jumlah diambil dari kolom F: peserta boleh menulis satu atau beberapa satuan yang ada di kunci.</p><div class="tw kt" style="max-height:none"><table><thead><tr><th>No</th><th>KKA</th><th>Uraian informasi berkas</th><th>Unsur uraian <div class="sub">pembeda = kata inti (tidak ada → 20) · kegiatan/objek −10 · subjek −10/−20 · sinonim pakai |</div></th><th>Jumlah <div class="sub">parameter diterima</div></th><th>SKKA</th><th>Retensi aktif / inaktif</th><th>Nasib akhir</th><th>Usul</th></tr></thead><tbody>
   ${KUNCI.map((k,i)=>{const s=statusUsul(k);return`<tr><td class="sub">${k.no}</td><td><b>${esc(k.kk)}</b><div class="sub">${nItem(k)} item</div></td><td style="min-width:200px">${esc(k.uraian)}<div class="sub">Indeks: ${esc(k.indeks)}</div></td>
    <td style="min-width:300px"><textarea class="kw" data-i="${i}" rows="3" ${window.ONLINE&&!ONL.admin?"disabled":""}>${esc(k.unsur)}</textarea>${window.ONLINE&&!ONL.admin?"":`<button class="btn sm ghost kwr" data-i="${i}">Kembalikan otomatis</button>`}</td>
    <td style="min-width:150px">${esc(k.jumlah)}<div style="margin-top:4px">${pasangJumlah(k.jumlah).map(p=>`<span class="tag" style="margin:1px">${esc(p)}</span>`).join(" ")||'<span class="pill bad">tidak terbaca</span>'}</div></td>

@@ -13,11 +13,12 @@ const kunciJab=j=>(KJ&&KJ[j])||[];
 if(typeof UNSUR_PRESET==="undefined"){var UNSUR_PRESET=[];}
 function unsurBawaan(k){
   const p=UNSUR_PRESET.find(x=>x.kk===normKK(k.kk)&&x.cue.test(String(k.uraian||"")+" "+String(k.indeks||"")));if(p)return p.u;
-  // pecah indeks: kata sebelum penanda subjek = kegiatan; sisanya = subjek/objek
-  const t=String(k.indeks||k.uraian).replace(/^\s*berkas\s+(tentang\s+)?/i,"").replace(/^\s*(rekomendasi|permohonan|usulan)\s+/i,"");
+  // susun otomatis dari indeks: kata tindakan (rekomendasi/permohonan/usulan) = kegiatan; inti sebelum penanda subjek = pembeda; sisanya = subjek
+  let t=String(k.indeks||k.uraian).replace(/^\s*berkas\s+(tentang\s+)?/i,"");
+  const tind=t.match(/^\s*(rekomendasi|permohonan|usulan|pengajuan|laporan|penetapan|pemberian)\s+/i);if(tind)t=t.slice(tind[0].length);
   const m=t.match(/^(.*?)\s+((di\s+lingkungan|di|pada|kepada|dari|a\.?\s?n\.?|siswa|mahasiswa|pegawai|bpsdm|kementerian|kemen\w*|pemerintah|politeknik|universitas|smk\w*|provinsi|kabupaten|kota|direktorat|dit\.?|sekretariat|badan|dinas)\b.*)$/i);
   const keg=tokens(m?m[1]:t).filter(w=>w!=="berkas"),sub=m?tokens(m[2]).filter(w=>w!=="lingkungan"&&w!=="mahasiswa"&&w!=="siswa"&&w!=="pegawai"):[];
-  return "kegiatan: "+keg.join(" ")+(sub.length?"\nsubjek: "+sub.join(" "):"");
+  return "pembeda: "+keg.join(" ")+(tind?"\nkegiatan: "+tind[1].toLowerCase():"")+(sub.length?"\nsubjek: "+sub.join(" "):"");
 }
 const kwKey=k=>"unsurUraian|"+k.kk+"|"+k.uraian;
 // HOOK: titik simpan. Versi offline = localStorage; versi online (online.js) menimpa dengan Supabase.
@@ -64,13 +65,27 @@ function nilaiKK(j,k){ // 33 per level; 100 benar; 20 salah
   let n=0;for(let i=0;i<3;i++)if(a[i]&&a[i]===b[i])n++;
   return n===3?[100,"benar"]:n===0?[20,"salah"]:[33*n,n+" level benar"];
 }
-function nilaiUraian(j,unsurTxt){ // pola: kegiatan (inti) + subjek/objek; skala notes 100/90/80/70/60/20
+// Uraian informasi berkas, dinilai per unsur pola kalimat (format uraian berkas / SPOK):
+//   pembeda  = kata inti yang membedakan berkas ini (mis. "kebutuhan" pada berkas rekomendasi kebutuhan JFA). Tidak ada → 20 (melenceng).
+//   kegiatan = jenis tindakan (rekomendasi, permohonan, usulan, penghargaan…) · objek = yang diurus · subjek = siapa/di mana.
+//   Tiap unsur yang kurang mengurangi nilai: kegiatan/objek −10, subjek kurang sebagian −10, subjek hilang −20; paling rendah 60.
+//   Bila unsur "pembeda" tidak ditulis, dipakai pola lama: baris pertama = inti (hilang → 20), unsur lain kurang sebagian −10 / hilang −20.
+function nilaiUraian(j,unsurTxt){
   const J=tokens(j);
   if(!J.length)return[20,"tidak membuat",[]];
   const U=parseUnsur(unsurTxt);if(!U.length)return[100,"unsur kunci belum diisi",[]];
   const hasil=U.map((u,i)=>{let best=null;u.alts.forEach(a=>{const ada=a.filter(w=>J.some(x=>mirip(w,x)));const r=ada.length/a.length;if(!best||r>best.r)best={r,kurang:a.filter(w=>!ada.includes(w))}});
-    const st=best.r===1?"lengkap":best.r>=0.5?"kurang sebagian":"hilang";return{label:u.label,st,kurang:best.kurang,inti:i===0}});
+    const st=best.r===1?"lengkap":best.r>=0.5?"kurang sebagian":"hilang";return{label:u.label.toLowerCase(),st,kurang:best.kurang,inti:i===0}});
   const kurang=hasil.filter(x=>x.st!=="lengkap").flatMap(x=>x.kurang);
+  const pemb=hasil.filter(x=>x.label==="pembeda");
+  if(pemb.length){
+    const gagal=pemb.find(x=>x.st!=="lengkap");
+    if(gagal)return[20,"melenceng (kata pembeda \""+gagal.kurang.join(" ")+"\" tidak ada)",kurang];
+    const lain=hasil.filter(x=>x.label!=="pembeda"&&x.st!=="lengkap");
+    const pot=lain.reduce((a,x)=>a+(x.label==="subjek"&&x.st==="hilang"?20:10),0);
+    const n=Math.max(60,100-pot);
+    return[n,n===100?"semua unsur lengkap":lain.map(x=>x.label+" "+x.st+" ("+x.kurang.join(", ")+")").join("; "),kurang];
+  }
   const ket=hasil.filter(x=>x.st!=="lengkap").map(x=>x.label+" "+x.st).join("; ");
   if(hasil[0].st==="hilang")return[20,"salah ("+hasil[0].label+" tidak sesuai)",kurang];
   const pot=hasil.reduce((a,x)=>a+(x.st==="hilang"?20:x.st==="kurang sebagian"?10:0),0);
