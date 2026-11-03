@@ -55,7 +55,7 @@ function tokens(s){
 function lev(a,b){const m=a.length,n=b.length;if(Math.abs(m-n)>1)return 9;const d=Array.from({length:m+1},(_,i)=>[i]);for(let j=1;j<=n;j++)d[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[m][n]}
 const mirip=(a,b)=>a===b||(a.length>=5&&b.length>=5&&lev(a,b)<=1);
 const flat=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"");
-const normKK=s=>String(s||"").toUpperCase().replace(/\s+/g,"").replace(/,/g,".");
+const normKK=s=>String(s||"").toUpperCase().trim().replace(/[\s,\-_/]+/g,".").replace(/\.{2,}/g,".").replace(/^\.|\.$/g,"").replace(/^([A-Z]{2})(\d)/,"$1.$2");
 const firstNum=s=>{const m=String(s||"").match(/\d+/);return m?m[0]:null};
 
 /* ================= RULES (sesuai notes) ================= */
