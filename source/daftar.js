@@ -126,24 +126,67 @@ function dialogDaftar(r,fname){
       <div class="tw" style="max-height:40vh;margin-top:12px"><table><thead><tr><th>No</th><th>Nama</th><th>NIP</th><th>Instansi</th><th>Jabatan saat ini</th><th>Tujuan / uji kompetensi</th><th>Jenis sertifikasi</th><th>Dinilai sebagai</th></tr></thead><tbody>
       ${r.rows.slice(0,300).map(o=>`<tr><td class="sub">${o.no}</td><td><b>${esc(o.nama)}</b></td><td class="sub">${esc(o.nip)}</td><td>${esc(o.instansi)}</td><td>${esc(o.jabatanKini||"")}</td><td>${esc(o.tujuan)}</td><td>${esc(o.jenis)}${o.jenisAuto?' <span class="sub">(disimpulkan)</span>':""}</td><td>${o.jab?esc(JAB[o.jab].label):'<span class="pill warn">belum jelas</span>'}</td></tr>`).join("")}</tbody></table></div>
       ${r.err.length?`<ul class="ml bad">${r.err.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}${r.warn.length?`<ul class="ml warn">${r.warn.slice(0,20).map(t=>`<li>${esc(t)}</li>`).join("")}${r.warn.length>20?`<li>… dan ${r.warn.length-20} lainnya</li>`:""}</ul>`:""}
-      ${DAFTAR.length&&!r.err.length?`<p class="sub" style="margin:12px 0 0">Daftar lama (${DAFTAR.length} peserta) akan diganti. File jawaban yang sudah dimuat akan dihubungkan ulang otomatis.</p>`:""}
-      <div class="mbar"><button class="btn ghost" data-t="tpl">Unduh template daftar</button><span style="flex:1"></span><button class="btn" data-t="batal">${r.err.length?"Tutup":"Batal"}</button>${r.err.length?"":`<button class="btn pri" data-t="ok">Pakai daftar ini</button>`}</div></div>`;
+      ${DAFTAR.length&&!r.err.length?(()=>{const dobel=r.rows.filter(o=>DAFTAR.some(d=>samaPeserta(d,o))).length;return`<div class="cnote info" style="margin-top:12px">Sudah ada ${DAFTAR.length} peserta di daftar kunci ini. <b>Tambahkan</b> = peserta baru ditambahkan (${r.rows.length-dobel} baru${dobel?`, ${dobel} sudah ada dilewati`:""}). <b>Ganti</b> = daftar lama dihapus dan diganti daftar ini.</div>`})():""}
+      <div class="mbar"><button class="btn ghost" data-t="tpl">Unduh template daftar</button><span style="flex:1"></span><button class="btn" data-t="batal">${r.err.length?"Tutup":"Batal"}</button>${r.err.length?"":DAFTAR.length?`<button class="btn" data-t="ganti">Ganti daftar</button><button class="btn pri" data-t="ok">Tambahkan ke daftar</button>`:`<button class="btn pri" data-t="ok">Pakai daftar ini</button>`}</div></div>`;
     document.body.appendChild(el);
     const tutup=v=>{el.remove();res(v)};
     el.querySelector("[data-t=tpl]").onclick=unduhTemplateDaftar;el.querySelector("[data-t=batal]").onclick=()=>tutup(false);
-    const ok=el.querySelector("[data-t=ok]");if(ok){ok.onclick=()=>tutup(true);ok.focus()}
+    const ok=el.querySelector("[data-t=ok]");if(ok){ok.onclick=()=>tutup(DAFTAR.length?"tambah":"ganti");ok.focus()}
+    const gt=el.querySelector("[data-t=ganti]");if(gt)gt.onclick=()=>tutup("ganti");
   });
 }
+// peserta yang sama: NIP sama, atau nama (tanpa gelar) sama
+function samaPeserta(a,b){if(a.nip&&b.nip)return a.nip===b.nip;return normNama(a.nama)===normNama(b.nama)}
+async function tambahKeDaftar(baru){
+  const masuk=baru.filter((o,i)=>!DAFTAR.some(d=>samaPeserta(d,o))&&!baru.slice(0,i).some(x=>samaPeserta(x,o)));let no=DAFTAR.reduce((m,d)=>Math.max(m,d.no||0),0);
+  masuk.forEach(o=>{o.no=++no;o.id="p"+Date.now().toString(36)+no});
+  if(window.ONLINE){const ok=await ONL.tambahDaftar(masuk);if(!ok)return null}else DAFTAR=DAFTAR.concat(masuk);
+  return{masuk:masuk.length,lewat:baru.length-masuk.length};
+}
+/* ---------- tambah satu peserta manual ---------- */
+const TUJUAN_OPSI=["Arsiparis Terampil","Arsiparis Mahir","Arsiparis Penyelia","Arsiparis Ahli Pertama","Arsiparis Ahli Muda","Pengelolaan Arsip Dinamis"];
+function dialogTambahPeserta(){
+  return new Promise(res=>{
+    const el=document.createElement("div");el.className="modal cf";
+    el.innerHTML=`<div class="cbox tanya" role="dialog" aria-modal="true" style="max-width:560px"><div class="cic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="8" r="4"/><path d="M3 21c0-4 3-6 7-6s7 2 7 6M19 5v6M16 8h6"/></svg></div>
+      <div class="eyebrow">Daftar peserta</div><h2>Tambah <em>peserta</em>.</h2>
+      <form id="tpF" class="tpf">
+        <label class="mfield">Nama<input id="tpN" required placeholder="Nama lengkap, gelar boleh"></label>
+        <div class="tp2"><label class="mfield">NIP<input id="tpP" inputmode="numeric" placeholder="18 digit (opsional)"></label>
+        <label class="mfield">Instansi<input id="tpI" placeholder="opsional"></label></div>
+        <div class="tp2"><label class="mfield">Jabatan saat ini<input id="tpK" list="tpKL" placeholder="mis. Pelaksana"></label>
+        <label class="mfield">Uji kompetensi / tujuan<select id="tpT" required><option value="">Pilih…</option>${TUJUAN_OPSI.map(t=>`<option>${t}</option>`).join("")}</select></label></div>
+        <datalist id="tpKL"><option>Pelaksana</option>${TUJUAN_OPSI.slice(0,5).map(t=>`<option>${t}</option>`).join("")}</datalist>
+        <p class="sub" id="tpInfo" style="margin:-4px 0 0">Jenis sertifikasi dan kunci penilaian ditentukan otomatis.</p>
+        <div class="cbar"><span style="flex:1"></span><button type="button" class="btn" data-t="batal">Batal</button><button class="btn pri" type="submit">Tambahkan</button></div></form></div>`;
+    document.body.appendChild(el);requestAnimationFrame(()=>el.classList.add("in"));
+    const tutup=v=>{el.classList.remove("in");setTimeout(()=>el.remove(),140);res(v)};
+    const info=()=>{const t=el.querySelector("#tpT").value,k=el.querySelector("#tpK").value,j=jabDariTujuan(t);el.querySelector("#tpInfo").textContent=t?`Jenis: ${jenisDariJabatan(k,t)||"–"} · dinilai dengan kunci ${j?JAB[j].label:"–"}`:"Jenis sertifikasi dan kunci penilaian ditentukan otomatis."};
+    el.querySelector("#tpT").onchange=info;el.querySelector("#tpK").oninput=info;
+    el.querySelector("[data-t=batal]").onclick=()=>tutup(null);el.onclick=e=>{if(e.target===el)tutup(null)};
+    el.querySelector("#tpF").onsubmit=e=>{e.preventDefault();const v=id=>el.querySelector(id).value.trim(),t=v("#tpT"),k=v("#tpK");
+      tutup({nama:v("#tpN"),nip:v("#tpP").replace(/\D/g,""),instansi:v("#tpI"),jabatanKini:k,tujuan:t,jenis:jenisDariJabatan(k,t),jenisAuto:true,jab:jabDariTujuan(t),fileHint:"",file:null})};
+    setTimeout(()=>el.querySelector("#tpN").focus(),50);
+  });
+}
+async function tambahSatuPeserta(){
+  const o=await dialogTambahPeserta();if(!o)return;
+  const h=await tambahKeDaftar([o]);if(!h)return;
+  if(!h.masuk){toast(o.nama+" sudah ada di daftar");return}
+  const n=hubungkanOtomatis();simpanDaftarLokal();render();toast(o.nama+" ditambahkan"+(n?" · langsung terhubung ke file jawabannya":""));
+}
+
 async function muatDaftar(f){
   try{
     const buf=await f.arrayBuffer();let r;
     if(/\.docx$/i.test(f.name)){const T=tabelDocx(buf);for(let i=0;i<T.length&&!r;i++)r=bacaGridPeserta(T[i],"tabel "+(i+1)+" di dokumen");if(!r)throw new Error("tidak ada tabel daftar asesi (kolom Nama/Asesi) di dokumen ini.")}
     else{const wb=XLSX.read(buf,{type:"array"});if(wb.SheetNames.some(n=>/^MasterPraktik/i.test(n)))throw new Error("ini file kunci jawaban, bukan daftar peserta.");r=bacaDaftarPeserta(wb)}
-    if(!await dialogDaftar(r,f.name))return;
-    DAFTAR=r.rows;
-    if(window.ONLINE){const ok=await ONL.simpanDaftar(DAFTAR);if(!ok)return}
+    const mode=await dialogDaftar(r,f.name);if(!mode)return;
+    let pesan;
+    if(mode==="tambah"){const h=await tambahKeDaftar(r.rows);if(!h)return;pesan=`${h.masuk} peserta ditambahkan`+(h.lewat?` · ${h.lewat} sudah ada, dilewati`:"")+` · total ${DAFTAR.length}`}
+    else{DAFTAR=r.rows;if(window.ONLINE){const ok=await ONL.simpanDaftar(DAFTAR);if(!ok)return}pesan=`${DAFTAR.length} peserta dimuat`}
     const n=hubungkanOtomatis();simpanDaftarLokal();VIEW="daftar";render();
-    toast(`${DAFTAR.length} peserta dimuat`+(n?` · ${n} file jawaban langsung terhubung`:""));
+    toast(pesan+(n?` · ${n} file jawaban langsung terhubung`:""));
   }catch(e){toast("Gagal membaca daftar peserta: "+e.message)}
 }
 const TEMPLATE_DAFTAR="/*TEMPLATE_DAFTAR*/";
@@ -186,7 +229,7 @@ function vDaftar(v){
   const tanpa=semua.filter(h=>!pesertaDari(h));
   let rows=DAFTAR.filter(d=>(!q||d.nama.toLowerCase().includes(q)||String(d.instansi).toLowerCase().includes(q))&&(f==="semua"||(f==="sudah"?ada(d):!ada(d)))&&(fj==="semua"||d.jab===fj||(fj==="?"&&!d.jab)));
   const nAda=DAFTAR.filter(ada).length;
-  v.innerHTML=`<div class="actions">${admin?`<button class="btn pri" id="dUp"><span class="plus">+</span> Upload daftar peserta</button>`:""}<button class="btn" id="dTpl">Unduh template daftar</button>${DAFTAR.length&&semua.length?`<button class="btn" id="dAuto">Hubungkan otomatis</button>`:""}</div>
+  v.innerHTML=`<div class="actions">${admin?`<button class="btn pri" id="dUp"><span class="plus">+</span> Upload daftar peserta</button>`:""}${admin?`<button class="btn" id="dAdd">+ Tambah peserta</button>`:""}<button class="btn" id="dTpl">Unduh template daftar</button>${DAFTAR.length&&semua.length?`<button class="btn" id="dAuto">Hubungkan otomatis</button>`:""}</div>
   <div class="kpis"><div class="kpi"><div class="kl"><span class="sq" style="background:var(--navy)"></span>Di daftar</div><div class="kv">${DAFTAR.length}</div><div class="ks">${Object.keys(JAB).map(j=>`${JAB[j].label.split(" /")[0]} ${DAFTAR.filter(d=>d.jab===j).length}`).join(" · ")}</div></div>
     <div class="kpi"><div class="kl"><span class="sq" style="background:var(--green)"></span>Jawaban masuk</div><div class="kv">${nAda}</div><div class="ks">terhubung ke file jawaban</div></div>
     <div class="kpi"><div class="kl"><span class="sq" style="background:var(--gold)"></span>Belum ada jawaban</div><div class="kv">${DAFTAR.length-nAda}</div><div class="ks">belum diunggah / belum cocok</div></div>
@@ -207,7 +250,7 @@ function vDaftar(v){
   :`<div class="panel"><div class="empty"><h3>Belum ada daftar peserta</h3><div>Upload daftar peserta (nama, jenis sertifikasi, tujuan jabatan). File jawaban yang diunggah nanti otomatis dicocokkan ke daftar ini dan dinilai sesuai tujuan jabatannya.</div>
     <div style="margin-top:16px;display:flex;gap:10px;justify-content:center">${admin?`<button class="btn pri" onclick="document.getElementById('fDaftar').click()"><span class="plus">+</span> Upload daftar peserta</button>`:""}<button class="btn" onclick="unduhTemplateDaftar()">Unduh template daftar</button></div></div></div>`}`;
   const up=$("dUp");if(up)up.onclick=()=>$("fDaftar").click();
-  $("dTpl").onclick=unduhTemplateDaftar;
+  $("dTpl").onclick=unduhTemplateDaftar;const ad=$("dAdd");if(ad)ad.onclick=tambahSatuPeserta;
   const au=$("dAuto");if(au)au.onclick=()=>{const n=hubungkanOtomatis();render();toast(n?n+" file jawaban dihubungkan":"Tidak ada file baru yang cocok")};
   const pq=$("pq");if(pq)pq.oninput=()=>{UI.pq=pq.value;const p=pq.selectionStart;render();const n=$("pq");n.focus();n.setSelectionRange(p,p)};
   const pf=$("pf");if(pf)pf.onchange=e=>{UI.pf=e.target.value;render()};
