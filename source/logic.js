@@ -59,11 +59,12 @@ const normKK=s=>String(s||"").toUpperCase().replace(/\s+/g,"").replace(/,/g,".")
 const firstNum=s=>{const m=String(s||"").match(/\d+/);return m?m[0]:null};
 
 /* ================= RULES (sesuai notes) ================= */
-function nilaiKK(j,k){ // 33 per level; 100 benar; 20 salah
+function nilaiKK(j,k){ // berjenjang: primer salah → 20; primer benar 33; + sekunder 66; + tersier 100
   const a=normKK(j).split("."),b=normKK(k).split(".");
   if(!a[0])return[20,"tidak membuat"];
-  let n=0;for(let i=0;i<3;i++)if(a[i]&&a[i]===b[i])n++;
-  return n===3?[100,"benar"]:n===0?[20,"salah"]:[33*n,n+" level benar"];
+  let n=0;for(let i=0;i<b.length&&i<3;i++){if(a[i]&&a[i]===b[i])n++;else break}
+  const lv=["primer","sekunder","tersier"];
+  return n>=Math.min(3,b.length)?[100,"benar"]:n===0?[20,"salah (primer "+a[0]+", kunci "+b[0]+")"]:[33*n,lv.slice(0,n).join(" & ")+" benar, "+lv[n]+" salah"];
 }
 // Uraian informasi berkas, dinilai per unsur pola kalimat (format uraian berkas / SPOK):
 //   pembeda  = kata inti yang membedakan berkas ini (mis. "kebutuhan" pada berkas rekomendasi kebutuhan JFA). Tidak ada → 20 (melenceng).
