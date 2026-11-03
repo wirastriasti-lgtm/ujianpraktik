@@ -798,6 +798,24 @@ function bacaUsul(g){
 }
 function namaDariFile(f){return f.replace(/\.[^.]+$/,"").replace(/^daftar[_\s-]*arsip[_\s-]*/i,"").replace(/_/g," ").replace(/\s+/g," ").trim()}
 
+// Padankan baris DAFTAR BERKAS peserta dengan berkas kunci, bertahap:
+//  1) kode klasifikasi sama persis;
+//  2) uraian paling mirip (≥2 kata kunci sama), dipilih dari pasangan terkuat lebih dulu;
+//  3) sisa baris yang belum terpakai dipasangkan ke sisa berkas kunci (urutan baris, kode primer sama didahulukan) —
+//     supaya salah tulis kode (mis. KP.05.00 untuk KP.09.05) tidak membuat seluruh berkas dianggap "tidak membuat".
+function padankanBerkas(db,KUNCI){
+  const out=KUNCI.map(()=>({idx:-1,cara:"tidak ditemukan"})),used=new Set();
+  KUNCI.forEach((k,ki)=>{const i=db.findIndex((r,j)=>!used.has(j)&&normKK(r.kk)===normKK(k.kk));if(i>=0){out[ki]={idx:i,cara:"kode sama"};used.add(i)}});
+  const isi=r=>String(r.kk||"").trim()||String(r.uraian||"").trim();
+  const pas=[];KUNCI.forEach((k,ki)=>{if(out[ki].idx>=0)return;const K=tokens(k.uraian+" "+k.indeks).filter(w=>w!=="berkas");
+    db.forEach((r,i)=>{if(used.has(i)||!isi(r))return;const sc=tokens(r.uraian).filter(w=>K.some(x=>mirip(w,x))).length;if(sc>=2)pas.push({ki,i,sc})})});
+  pas.sort((a,b)=>b.sc-a.sc||Math.abs(a.ki-a.i)-Math.abs(b.ki-b.i)).forEach(x=>{if(out[x.ki].idx<0&&!used.has(x.i)){out[x.ki]={idx:x.i,cara:"dipadankan lewat uraian"};used.add(x.i)}});
+  const sisaK=KUNCI.map((k,ki)=>ki).filter(ki=>out[ki].idx<0),sisaB=db.map((r,i)=>i).filter(i=>!used.has(i)&&isi(db[i]));
+  sisaK.forEach(ki=>{if(!sisaB.length)return;const pk=normKK(KUNCI[ki].kk).split(".")[0];
+    let pick=sisaB.find(i=>normKK(db[i].kk).split(".")[0]===pk);if(pick===undefined)pick=sisaB[0];
+    sisaB.splice(sisaB.indexOf(pick),1);out[ki]={idx:pick,cara:"dipadankan dari sisa baris (kode "+(db[pick].kk||"kosong")+")"}});
+  return out;
+}
 // parseWb: baca isi file jawaban jadi data polos (bisa disimpan sebagai JSON / dikirim ke Supabase)
 function parseWb(wb){
   const catatan=[];
@@ -818,15 +836,12 @@ function nilaiParsed(p,file,jabKey){
   const catatan=[...p.catatan],db=p.db,isi=p.isi,usul=p.usul;
   const J=JAB[jabKey];
   if(jabKey==="muda")["pindah","musnah","serah"].forEach(u=>{if(!usul[u])catatan.push("Sheet usul "+u+" tidak ditemukan")});
-  const used=new Set();
-  const berkas=KUNCI.map(k=>{
-    let idx=db.findIndex((r,i)=>!used.has(i)&&normKK(r.kk)===normKK(k.kk)),cara="kode sama";
-    if(idx<0){ // cari padanan lewat uraian
-      let best=-1,bs=0;db.forEach((r,i)=>{if(used.has(i))return;const K=tokens(k.uraian+" "+k.indeks).filter(w=>w!=="berkas");const s=tokens(r.uraian).filter(w=>K.some(x=>mirip(w,x))).length;if(s>bs){bs=s;best=i}});
-      if(bs>=2){idx=best;cara="dipadankan lewat uraian";}
-    }
+  const PAD=padankanBerkas(db,KUNCI);
+  const used=new Set(PAD.filter(x=>x.idx>=0).map(x=>x.idx));
+  const berkas=KUNCI.map((k,ki)=>{
+    const idx=PAD[ki].idx,cara=PAD[ki].cara;
     const r=idx>=0?db[idx]:{kk:"",uraian:"",jumlah:"",skka:"",aktif:"",inaktif:"",nasib:""};
-    if(idx>=0)used.add(idx);else catatan.push(`Berkas ${k.no} (${k.kk}) tidak ditemukan di DAFTAR BERKAS`);
+    if(idx<0)catatan.push(`Berkas ${k.no} (${k.kk}) tidak ditemukan di DAFTAR BERKAS`);
     const st=statusUsul(k),kkJ=normKK(r.kk);
     const S={},D={};
     [S.X,D.X]=nilaiKK(r.kk,k.kk);
