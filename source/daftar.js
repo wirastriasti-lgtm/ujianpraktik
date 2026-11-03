@@ -10,35 +10,67 @@ function jabDariTujuan(t){t=String(t||"").toLowerCase();
   if(/muda/.test(t))return"muda";if(/pertama|penyelia/.test(t))return"penyelia";if(/terampil|mahir|pelaksana/.test(t))return"terampil";return null}
 
 /* ---------- baca file daftar peserta ---------- */
-const DPOLA=[["fileHint",/nama\s*file|file\s*jawaban/i],["instansi",/instansi|unit\s*kerja|satuan\s*kerja|^asal|^unit/i],["nip",/^nip\b|\bnip$/i],["jenis",/jenis|sertifikasi/i],["tujuan",/tujuan|jenjang|jabatan/i],["nama",/^nama(\s*(lengkap|peserta))?$/i],["no",/^no\.?$/i]];
-function bacaDaftarPeserta(wb){
-  for(const sn of wb.SheetNames){
-    const g=grid(wb.Sheets[sn]);
-    for(let r=0;r<Math.min(g.length,15);r++){
-      const lab=(g[r]||[]).map(v=>String(v??"").replace(/\s+/g," ").trim());
-      if(!lab.some(l=>/^nama/i.test(l)&&l.length<=30))continue;
-      const col={},used=new Set();
-      DPOLA.forEach(([f,re])=>{const c=lab.findIndex((l,i)=>!used.has(i)&&l&&l.length<=40&&re.test(l));if(c>=0){col[f]=c;used.add(c)}});
-      if(col.nama===undefined){const c=lab.findIndex((l,i)=>!used.has(i)&&/^nama/i.test(l));if(c>=0)col.nama=c}
-      if(col.nama===undefined)continue;
-      const s=(row,f)=>col[f]===undefined?"":String((g[row]||[])[col[f]]??"").replace(/\s+/g," ").trim();
-      const rows=[],err=[],warn=[];
-      for(let i=r+1;i<g.length;i++){
-        const nama=s(i,"nama");if(!nama)continue;
-        const o={id:"p"+i,no:Number(s(i,"no"))||rows.length+1,nama,nip:s(i,"nip").replace(/\s+/g,""),instansi:s(i,"instansi"),jenis:s(i,"jenis"),tujuan:s(i,"tujuan"),fileHint:s(i,"fileHint"),file:null};
-        o.jab=jabDariTujuan(o.tujuan);
-        if(!o.jab)warn.push(`Baris ${i+1} (${nama}): tujuan jabatan "${o.tujuan||"kosong"}" tidak dikenali — jabatan dipilih saat upload jawaban`);
-        rows.push(o);
-      }
-      const seen={};rows.forEach(o=>{const k=o.nip||normNama(o.nama);if(seen[k])warn.push(`${o.nama}: tercantum dua kali (baris ${seen[k]} dan ${o.no})`);seen[k]=o.no});
-      if(!rows.length)err.push("Tidak ada nama peserta di bawah baris judul.");
-      if(col.tujuan===undefined)warn.push("Kolom Tujuan Jabatan tidak ditemukan — jabatan tiap peserta dipilih saat upload jawaban.");
-      return{sheet:sn,rows,err,warn,kolom:Object.fromEntries(Object.entries(col).map(([f,c])=>[f,XLSX.utils.encode_col(c)]))};
-    }
-  }
-  throw new Error("kolom Nama tidak ditemukan. Pakai template daftar peserta (kolom Nama, Instansi, Jenis Sertifikasi, Tujuan Jabatan).");
+// Sumber: template Excel, ekspor sistem, atau langsung surat pemanggilan (.docx, Lampiran I "Daftar Tujuan Surat dan Asesi").
+const DPOLA=[["fileHint",/nama\s*file|file\s*jawaban/i],["instansi",/tujuan\s*surat|instansi|unit\s*kerja|satuan\s*kerja|^asal|^unit/i],["nip",/^nip\b|\bnip$/i],
+  ["kini",/jabatan\s*(saat\s*ini|sekarang|terakhir|asal)/i],["jenis",/jenis|sertifikasi/i],["tujuan",/uji\s*kompetensi|tujuan\s*jabatan|jabatan\s*(yang\s*)?(dituju|tujuan)|^tujuan$|jenjang/i],
+  ["nama",/^(nama(\s*(lengkap|peserta|asesi))?|asesi|peserta)$/i],["no",/^no\.?$/i]];
+// tujuan jabatan / uji kompetensi → kunci yang dipakai (PAD = Pengelolaan Arsip Dinamis dinilai dengan kunci Terampil/Mahir/PA)
+function jabDariTujuan(t){t=String(t||"").toLowerCase();
+  if(/muda/.test(t))return"muda";if(/pertama|penyelia/.test(t))return"penyelia";if(/terampil|mahir|pelaksana|pengelola(an)?\s*arsip|\bpad\b/.test(t))return"terampil";return null}
+// jenis sertifikasi bila tidak ada kolomnya: disimpulkan dari jabatan saat ini → uji kompetensi
+function jenisDariJabatan(kini,tujuan){const k=String(kini||"").toLowerCase(),t=String(tujuan||"").toLowerCase();if(!t)return"";
+  if(/pengelola(an)?\s*arsip|\bpad\b/.test(t))return"Kompetensi Teknis (Pengelolaan Arsip Dinamis)";
+  if(/ars[ip]+ar?is|arspiris/.test(k))return"Kenaikan Jenjang";return k?"Perpindahan Jabatan":""}
+function tabelDocx(buf){
+  const z=XLSX.CFB.read(new Uint8Array(buf),{type:"array"});const e=XLSX.CFB.find(z,"/word/document.xml");if(!e)throw new Error("file .docx tidak berisi dokumen");
+  const xml=new TextDecoder("utf-8").decode(e.content),doc=new DOMParser().parseFromString(xml,"application/xml"),W="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+  const teks=el=>[...el.getElementsByTagNameNS(W,"p")].map(p=>[...p.getElementsByTagNameNS(W,"t")].map(t=>t.textContent).join("")).join("\n").trim();
+  // sel gabungan: gridSpan (melebar ke samping) diulang sebanyak span; vMerge lanjutan (gabung ke bawah) mengambil isi sel di atasnya
+  const anak=(el,n)=>[...el.children].filter(c=>c.localName===n);
+  return[...doc.getElementsByTagNameNS(W,"tbl")].map(tb=>{const out=[];anak(tb,"tr").forEach(tr=>{const row=[];
+    anak(tr,"tc").forEach(tc=>{const pr=anak(tc,"tcPr")[0],gs=pr&&anak(pr,"gridSpan")[0],vm=pr&&anak(pr,"vMerge")[0];
+      const span=gs?Number(gs.getAttributeNS(W,"val")||gs.getAttribute("w:val"))||1:1;let t=teks(tc);
+      if(vm&&!/restart/.test(vm.getAttributeNS(W,"val")||vm.getAttribute("w:val")||"")&&out.length)t=(out[out.length-1][row.length]??"");
+      for(let i=0;i<span;i++)row.push(t)});out.push(row)});return out});
 }
-
+function bacaGridPeserta(g,sumber){
+  for(let r=0;r<Math.min(g.length,15);r++){
+    const lab=(g[r]||[]).map(v=>String(v??"").replace(/\s+/g," ").trim());
+    if(!lab.some(l=>/^(nama|asesi|peserta)/i.test(l)&&l.length<=30))continue;
+    const col={},used=new Set();
+    DPOLA.forEach(([f,re])=>{
+      const cand=lab.map((l,i)=>i).filter(i=>!used.has(i)&&lab[i]&&lab[i].length<=40&&re.test(lab[i]));if(!cand.length)return;
+      // judul ganda (sel gabungan, mis. "ASESI | ASESI"): pilih kolom yang paling banyak terisi
+      const isi=i=>g.slice(r+1).filter(x=>String((x||[])[i]??"").trim()).length;const c=cand.sort((a,b)=>isi(b)-isi(a))[0];col[f]=c;cand.forEach(i=>used.add(i))});
+    if(col.nama===undefined)continue;
+    const s=(row,f)=>col[f]===undefined?"":String((g[row]||[])[col[f]]??"").trim();
+    const rows=[],err=[],warn=[];let disimpulkan=0;
+    for(let i=r+1;i<g.length;i++){
+      let sel=s(i,"nama");if(!sel)continue;
+      // sel nama bisa memuat NIP: "Ratna Dewi P., S.H.\nNIP. 1980…"
+      let nip=s(i,"nip").replace(/\D/g,"");const m=sel.match(/NIP\.?\s*:?\s*([\d\s]{18,23})/i)||sel.match(/(\d{18})/);
+      if(m){if(!nip)nip=m[1].replace(/\D/g,"");sel=sel.slice(0,m.index)}
+      const nama=sel.replace(/\s+/g," ").replace(/[\s,;-]+$/,"").trim();if(!nama||/^(nama|asesi)$/i.test(nama))continue;
+      const o={id:"p"+i,no:rows.length+1,nama,nip,instansi:s(i,"instansi").replace(/\s+/g," "),jabatanKini:s(i,"kini").replace(/\s+/g," "),jenis:s(i,"jenis").replace(/\s+/g," "),tujuan:s(i,"tujuan").replace(/\s+/g," "),fileHint:s(i,"fileHint"),file:null};
+      if(!o.jenis&&o.tujuan){o.jenis=jenisDariJabatan(o.jabatanKini,o.tujuan);if(o.jenis){o.jenisAuto=true;disimpulkan++}}
+      o.jab=jabDariTujuan(o.tujuan);
+      if(!o.jab)warn.push(`${nama}: tujuan/uji kompetensi "${o.tujuan||"kosong"}" tidak dikenali — jabatan dipilih saat upload jawaban`);
+      rows.push(o);
+    }
+    if(!rows.length)continue;
+    // kolom instansi yang isinya sama untuk semua baris (mis. "Tujuan Surat" = alamat surat, bukan instansi asal) diabaikan
+    if(rows.length>3&&rows.every(o=>o.instansi===rows[0].instansi)){if(rows[0].instansi)warn.push(`Kolom instansi berisi teks yang sama untuk semua peserta ("${rows[0].instansi.slice(0,60)}") — diabaikan.`);rows.forEach(o=>o.instansi="")}
+    const seen={};rows.forEach(o=>{const k=o.nip||normNama(o.nama);if(seen[k])warn.push(`${o.nama}: tercantum dua kali (no ${seen[k]} dan ${o.no})`);seen[k]=o.no});
+    if(col.tujuan===undefined)warn.push("Kolom tujuan jabatan / uji kompetensi tidak ditemukan — jabatan tiap peserta dipilih saat upload jawaban.");
+    if(disimpulkan)warn.push(`Jenis sertifikasi ${disimpulkan} peserta disimpulkan dari jabatan saat ini → uji kompetensi (PAD = kompetensi teknis; sudah Arsiparis = kenaikan jenjang; belum Arsiparis = perpindahan jabatan).`);
+    return{sheet:sumber,rows,err,warn,kolom:Object.fromEntries(Object.entries(col).map(([f,c])=>[f,XLSX.utils.encode_col(c)]))};
+  }
+  return null;
+}
+function bacaDaftarPeserta(wb){
+  for(const sn of wb.SheetNames){const r=bacaGridPeserta(grid(wb.Sheets[sn]),sn);if(r)return r}
+  throw new Error("kolom Nama/Asesi tidak ditemukan. Pakai template daftar peserta atau surat pemanggilan (.docx) yang memuat Lampiran daftar asesi.");
+}
 /* ---------- pencocokan file jawaban ↔ peserta ---------- */
 const NOISE=new Set(["ujian","praktik","praktek","daftar","arsip","berkas","jawaban","ahli","pertama","muda","terampil","mahir","penyelia","arsiparis","sertifikasi","final","revisi","rev","copy","salinan","fix","new","baru","xlsx","xls","jfa","uji","kompetensi","tes","test","peserta","nama","dan","di","ke"]);
 const GELAR=/\b(s|a|d|m)\s*\.?\s*(kom|ap|ip|sos|e|h|pd|si|ak|ikom|i\.?kom|m|t|psi|hum|kes|ag|stp|tr)\b\.?|\b(dr|drs|dra|ir|h|hj|prof|amd|a\.md|se|sh|st|mm|mt|msi|mpa|map|mkom|ssos|skom|sap|sip|spd|mpd|sstp|mh|sh)\b\.?/gi;
@@ -89,10 +121,10 @@ function dialogDaftar(r,fname){
     const el=document.createElement("div");el.className="modal";
     el.innerHTML=`<div class="mbox" role="dialog" aria-modal="true"><div class="eyebrow">Periksa daftar peserta</div>
       <h2>${r.err.length?"Daftar <em>belum valid</em>.":`${r.rows.length} peserta <em>siap dipakai</em>.`}</h2>
-      <p class="sub" style="font-size:13.5px;margin:0 0 12px">${esc(fname)} · sheet ${esc(r.sheet)} · kolom terbaca: ${Object.entries(r.kolom).filter(([f])=>f!=="no").map(([f,c])=>`${({nama:"nama",nip:"NIP",instansi:"instansi",jenis:"jenis sertifikasi",tujuan:"tujuan jabatan",fileHint:"nama file"})[f]} ${c}`).join(", ")}</p>
+      <p class="sub" style="font-size:13.5px;margin:0 0 12px">${esc(fname)} · sheet ${esc(r.sheet)} · kolom terbaca: ${Object.entries(r.kolom).filter(([f])=>f!=="no").map(([f,c])=>`${({nama:"nama",nip:"NIP",instansi:"instansi/tujuan surat",kini:"jabatan saat ini",jenis:"jenis sertifikasi",tujuan:"tujuan jabatan/uji kompetensi",fileHint:"nama file"})[f]} ${c}`).join(", ")}</p>
       <div class="chips">${Object.keys(JAB).map(j=>`<span class="pill ok">${JAB[j].label}: ${per[j]||0}</span>`).join(" ")}${per["?"]?`<span class="pill warn">Tujuan tidak dikenali: ${per["?"]}</span>`:""}${Object.entries(jenis).map(([k,n])=>`<span class="pill no">${esc(k)}: ${n}</span>`).join(" ")}</div>
-      <div class="tw" style="max-height:40vh;margin-top:12px"><table><thead><tr><th>No</th><th>Nama</th><th>NIP</th><th>Instansi</th><th>Jenis sertifikasi</th><th>Tujuan jabatan</th><th>Dinilai sebagai</th></tr></thead><tbody>
-      ${r.rows.slice(0,300).map(o=>`<tr><td class="sub">${o.no}</td><td><b>${esc(o.nama)}</b></td><td class="sub">${esc(o.nip)}</td><td>${esc(o.instansi)}</td><td>${esc(o.jenis)}</td><td>${esc(o.tujuan)}</td><td>${o.jab?esc(JAB[o.jab].label):'<span class="pill warn">belum jelas</span>'}</td></tr>`).join("")}</tbody></table></div>
+      <div class="tw" style="max-height:40vh;margin-top:12px"><table><thead><tr><th>No</th><th>Nama</th><th>NIP</th><th>Instansi</th><th>Jabatan saat ini</th><th>Tujuan / uji kompetensi</th><th>Jenis sertifikasi</th><th>Dinilai sebagai</th></tr></thead><tbody>
+      ${r.rows.slice(0,300).map(o=>`<tr><td class="sub">${o.no}</td><td><b>${esc(o.nama)}</b></td><td class="sub">${esc(o.nip)}</td><td>${esc(o.instansi)}</td><td>${esc(o.jabatanKini||"")}</td><td>${esc(o.tujuan)}</td><td>${esc(o.jenis)}${o.jenisAuto?' <span class="sub">(disimpulkan)</span>':""}</td><td>${o.jab?esc(JAB[o.jab].label):'<span class="pill warn">belum jelas</span>'}</td></tr>`).join("")}</tbody></table></div>
       ${r.err.length?`<ul class="ml bad">${r.err.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`:""}${r.warn.length?`<ul class="ml warn">${r.warn.slice(0,20).map(t=>`<li>${esc(t)}</li>`).join("")}${r.warn.length>20?`<li>… dan ${r.warn.length-20} lainnya</li>`:""}</ul>`:""}
       ${DAFTAR.length&&!r.err.length?`<p class="sub" style="margin:12px 0 0">Daftar lama (${DAFTAR.length} peserta) akan diganti. File jawaban yang sudah dimuat akan dihubungkan ulang otomatis.</p>`:""}
       <div class="mbar"><button class="btn ghost" data-t="tpl">Unduh template daftar</button><span style="flex:1"></span><button class="btn" data-t="batal">${r.err.length?"Tutup":"Batal"}</button>${r.err.length?"":`<button class="btn pri" data-t="ok">Pakai daftar ini</button>`}</div></div>`;
@@ -104,9 +136,9 @@ function dialogDaftar(r,fname){
 }
 async function muatDaftar(f){
   try{
-    const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});
-    if(wb.SheetNames.some(n=>/^MasterPraktik/i.test(n)))throw new Error("ini file kunci jawaban, bukan daftar peserta.");
-    const r=bacaDaftarPeserta(wb);
+    const buf=await f.arrayBuffer();let r;
+    if(/\.docx$/i.test(f.name)){const T=tabelDocx(buf);for(let i=0;i<T.length&&!r;i++)r=bacaGridPeserta(T[i],"tabel "+(i+1)+" di dokumen");if(!r)throw new Error("tidak ada tabel daftar asesi (kolom Nama/Asesi) di dokumen ini.")}
+    else{const wb=XLSX.read(buf,{type:"array"});if(wb.SheetNames.some(n=>/^MasterPraktik/i.test(n)))throw new Error("ini file kunci jawaban, bukan daftar peserta.");r=bacaDaftarPeserta(wb)}
     if(!await dialogDaftar(r,f.name))return;
     DAFTAR=r.rows;
     if(window.ONLINE){const ok=await ONL.simpanDaftar(DAFTAR);if(!ok)return}
@@ -166,7 +198,7 @@ function vDaftar(v){
   <div class="tw"><table><thead><tr><th class="n">No</th><th>Nama</th><th>Instansi</th><th>Jenis sertifikasi</th><th>Tujuan jabatan</th><th>File jawaban</th><th class="n">Nilai DA</th></tr></thead><tbody>
   ${rows.map(d=>{const h=d.file?semua.find(x=>x.file===d.file&&(x.jab===(d.jabPakai||d.jab)||!d.jab)):null;
     return`<tr><td class="n sub">${d.no}</td><td><b>${esc(d.nama)}</b>${d.nip?`<div class="sub">NIP ${esc(d.nip)}</div>`:""}</td><td>${esc(d.instansi)}</td><td>${esc(d.jenis)}</td>
-    <td>${esc(d.tujuan||"–")}<div class="sub">${d.jab?"dinilai "+esc(JAB[d.jab].label):'<span style="color:var(--amber)">jabatan belum jelas</span>'}</div></td>
+    <td>${esc(d.tujuan||"–")}${d.jabatanKini?`<div class="sub">dari ${esc(d.jabatanKini)}</div>`:""}<div class="sub">${d.jab?"dinilai "+esc(JAB[d.jab].label):'<span style="color:var(--amber)">jabatan belum jelas</span>'}</div></td>
     <td>${h?`<span class="pill ok">✓ ada</span> <span class="sub">${esc(h.file)}</span>${admin?` <button class="hpb" style="opacity:.7" data-lepas="${d.id}">lepas</button>`:""}`:`<span class="pill no">belum ada</span>${tanpa.length?` <select class="sm" data-link="${d.id}"><option value="">hubungkan ke file…</option>${tanpa.map(x=>`<option value="${esc(fKey(x))}">${esc(x.file)} (${esc(JAB[x.jab].label.split(" /")[0])})</option>`).join("")}</select>`:""}`}</td>
     <td class="n">${h?`<span class="sc ${cls(h.rata)}">${fmt(h.rata)}</span>`:"–"}</td></tr>`}).join("")}
   </tbody></table>${rows.length?"":`<div class="empty">Tidak ada peserta yang cocok dengan filter.</div>`}</div>

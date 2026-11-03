@@ -144,14 +144,14 @@ const ONL={
     Object.keys(FISIK).filter(k=>k.startsWith(jab+"|")).forEach(k=>delete FISIK[k]);
   },
   /* ---------- daftar peserta ---------- */
-  dariBaris(r){return{id:"d"+r.id,dbid:r.id,no:r.urut,nama:r.nama,nip:r.nip||"",instansi:r.instansi||"",jenis:r.jenis||"",tujuan:r.tujuan||"",jab:r.jabatan||null,fileHint:r.file_hint||"",file:r.file||null,jabPakai:r.jab_pakai||null}},
+  dariBaris(r){return{id:"d"+r.id,dbid:r.id,no:r.urut,nama:r.nama,nip:r.nip||"",instansi:r.instansi||"",jenis:r.jenis||"",tujuan:r.tujuan||"",jabatanKini:r.jabatan_kini||"",jab:r.jabatan||null,fileHint:r.file_hint||"",file:r.file||null,jabPakai:r.jab_pakai||null}},
   async muatDaftarServer(){const rows=await this.ambilSemua("daftar_peserta","*");DAFTAR=rows.sort((a,b)=>(a.urut||0)-(b.urut||0)).map(r=>this.dariBaris(r))},
   async simpanDaftar(list){
     if(!this.admin){toast("Hanya admin yang bisa mengunggah daftar peserta.");return false}
     this.setSync("run");
     const del=await this.sb.from("daftar_peserta").delete().eq("kunci_id",this.kunciId);
     if(del.error){this.setSync("err");toast("Gagal mengganti daftar: "+del.error.message);return false}
-    const rows=list.map(d=>({kunci_id:this.kunciId,urut:d.no,nama:d.nama,nip:d.nip||null,instansi:d.instansi||null,jenis:d.jenis||null,tujuan:d.tujuan||null,jabatan:d.jab||null,file_hint:d.fileHint||null,file:null,updated_by:this.email}));
+    const rows=list.map(d=>({kunci_id:this.kunciId,urut:d.no,nama:d.nama,nip:d.nip||null,instansi:d.instansi||null,jenis:d.jenis||null,tujuan:d.tujuan||null,jabatan_kini:d.jabatanKini||null,jabatan:d.jab||null,file_hint:d.fileHint||null,file:null,updated_by:this.email}));
     const{data,error}=await this.sb.from("daftar_peserta").insert(rows).select("*");
     if(error){this.setSync("err");toast("Gagal menyimpan daftar: "+error.message);return false}
     DAFTAR=data.sort((a,b)=>(a.urut||0)-(b.urut||0)).map(r=>this.dariBaris(r));this.setSync("ok");return true;
