@@ -24,7 +24,8 @@ function tokUrai(s){return String(s||"").toLowerCase().replace(/\b(smk|sma|smp|s
 // frasa yang harus utuh sebagai pembeda, dan sinonim yang diterima
 const FRASA=[["kenaikan pangkat","kenaikan golongan"],["satya lancana"],["praktik kerja lapangan","pkl","magang","prakerin"],["magang","praktik kerja lapangan","prakerin"],["kebutuhan","formasi"],["formasi","kebutuhan"],["mutasi","perpindahan"],["pensiun","purna tugas"],["cuti"],["diklat","pelatihan","pendidikan pelatihan"],["pelatihan","diklat"]];
 function unsurBawaan(k){
-  const p=UNSUR_PRESET.find(x=>x.kk===normKK(k.kk)&&x.cue.test(String(k.uraian||"")+" "+String(k.indeks||"")));if(p)return p.u;
+  // preset hanya dipakai bila sudah berformat unsur pembeda (preset lama tanpa "pembeda:" diabaikan)
+  const p=UNSUR_PRESET.find(x=>x.kk===normKK(k.kk)&&/(^|\n)\s*pembeda\s*:/i.test(x.u)&&x.cue.test(String(k.uraian||"")+" "+String(k.indeks||"")));if(p)return p.u;
   // uraian lebih lengkap dari indeks; kata "berkas/tentang/perihal" dibuang
   const W=tokUrai(String(k.uraian||k.indeks).replace(/^\s*berkas\s+(tentang|perihal|mengenai)?\s*/i,"")).filter(w=>!/^(berkas|tentang|perihal|mengenai|yang|bidang|dan|serta)$/.test(w));
   let i=0;const keg=[];while(i<W.length&&KATA_TINDAKAN.test(W[i])&&i<W.length-1){keg.push(W[i]);i++}
@@ -56,10 +57,13 @@ function simpanKataWajib(k){k.unsurSimpan=k.unsur;HOOK.unsur(k)}
 function parseUnsur(txt){return String(txt||"").split(/\n+/).map(l=>l.trim()).filter(Boolean).map(l=>{const m=l.match(/^([^:]+):(.*)$/);const label=m?m[1].trim():"unsur";const alts=(m?m[2]:l).split("|").map(a=>tokens(a).filter(w=>w!=="berkas")).filter(a=>a.length);return{label,alts}}).filter(u=>u.alts.length)}
 
 const ya=v=>/^(ya|y|v|√|✓|x|1|true)$/i.test(String(v||"").trim());
-function statusUsul(k){return{
-  pindah:k.pindah!==""?ya(k.pindah):true,
-  musnah:k.musnah!==""?ya(k.musnah):/^\s*musnah/i.test(k.nasib),
-  serah:k.serah!==""?ya(k.serah):/^\s*permanen/i.test(k.nasib)}}
+// Usul per berkas. Bila kolom K–M (usul pindah/musnah/serah) diisi di master untuk berkas mana pun, isian itulah kuncinya
+// (sel kosong = tidak diusulkan). Bila semuanya kosong, diturunkan dari nasib akhir: semua pindah, "Musnah…" → musnah, "Permanen" → serah.
+function usulEksplisit(list){return(list||[]).some(k=>String(k.pindah||"").trim()||String(k.musnah||"").trim()||String(k.serah||"").trim())}
+function statusUsul(k,eks){
+  if(eks===undefined)eks=usulEksplisit(typeof KJ!=="undefined"?Object.values(KJ).find(l=>l&&l.includes(k)):null);
+  if(eks)return{pindah:ya(k.pindah),musnah:ya(k.musnah),serah:ya(k.serah),sumber:"master"};
+  return{pindah:true,musnah:/^\s*musnah/i.test(k.nasib),serah:/^\s*permanen/i.test(k.nasib),sumber:"otomatis"}}
 
 /* ================= KOMPONEN & JABATAN ================= */
 const KOMP={
@@ -284,7 +288,7 @@ function nilaiParsed(p,file,jabKey){
     const idx=PAD[ki].idx,cara=PAD[ki].cara;
     const r=idx>=0?db[idx]:{kk:"",uraian:"",jumlah:"",skka:"",aktif:"",inaktif:"",nasib:""};
     if(idx<0)catatan.push(`Berkas ${k.no} (${k.kk}) tidak ditemukan di DAFTAR BERKAS`);
-    const st=statusUsul(k),kkJ=normKK(r.kk);
+    const st=statusUsul(k,usulEksplisit(KUNCI)),kkJ=normKK(r.kk);
     const S={},D={};
     [S.X,D.X]=nilaiKK(r.kk,k.kk);
     let kurang;[S.Y,D.Y,kurang]=nilaiUraian(r.uraian,k.unsur);
