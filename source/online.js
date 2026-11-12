@@ -63,6 +63,7 @@ const ONL={
     const{data:me,error}=await this.sb.from("penilai").select("*").eq("email",this.email).maybeSingle();
     if(error||!me)return this.layarLogin("tolak",`Akun <b>${esc(namaAkun(this.email))}</b> belum terdaftar sebagai penilai. Minta admin menambahkannya di menu Tim penilai, lalu muat ulang halaman ini.`);
     this.nama=me.nama||namaAkun(this.email);this.admin=me.peran==="admin";
+    const tm=await this.sb.from("penilai").select("email,nama");this.timMap={};(tm.data||[]).forEach(p=>{if(p.nama){this.timMap[p.email]=p.nama;this.timMap[namaAkun(p.email)]=p.nama}});
     const l=document.getElementById("login");if(l)l.remove();
     document.querySelector(".wrap").style.display="";document.getElementById("dl").style.display="";document.getElementById("jnav").style.visibility="";
     this.pasangHeader();

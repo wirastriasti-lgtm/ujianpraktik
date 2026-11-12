@@ -37,8 +37,24 @@ const siapa=()=>window.ONLINE&&ONL.email?String(ONL.email).replace(/@penilai\.lo
 function verGet(h){return VER[fKey(h)]||(VER[fKey(h)]={kor:{},cek:{}})}
 function verSimpan(h){const k=fKey(h);if(window.ONLINE)ONL.simpanVer(h,VER[k]);else try{localStorage.setItem(VKEY,JSON.stringify(VER))}catch(e){}
   const i=semua.findIndex(x=>fKey(x)===k);if(i>=0)semua[i]=nilaiParsed(semua[i].parsed,semua[i].file,semua[i].jab)}
-function setKoreksi(h,no,c,o){const V=verGet(h);V.kor[no]=V.kor[no]||{};if(o)V.kor[no][c]=o;else{delete V.kor[no][c];if(!Object.keys(V.kor[no]).length)delete V.kor[no]}verSimpan(h)}
-function setCek(h,no,on){const V=verGet(h);if(on)V.cek[no]={oleh:siapa(),t:new Date().toISOString()};else delete V.cek[no];verSimpan(h)}
+// verifikasi akhir per peserta: VER[key].final = {oleh,t}; dibuka lagi bila koreksi berubah / tanda cek dicabut
+function verFinal(h){const V=VER[fKey(h)];return V&&V.final||null}
+function setFinal(h,on){const V=verGet(h);if(on)V.final={oleh:siapa(),t:new Date().toISOString()};else delete V.final;verSimpan(h)}
+function bukaFinal(V,h){if(V.final){delete V.final;setTimeout(()=>toast(`Verifikasi ${h.nama} dibuka kembali karena nilai/tanda cek berubah`),50)}}
+const namaOrang=e=>{if(!e)return"";const m=(window.ONLINE&&ONL.timMap)||{};return m[e]||m[String(e).toLowerCase()]||String(e).replace(/@penilai\.local$/,"")};
+function infoPenilai(h){const k=fKey(h),ff=FISIK[k],V=VER[k]||{},ver=new Set();
+  Object.values(V.kor||{}).forEach(o=>Object.values(o||{}).forEach(x=>x&&x.oleh&&ver.add(namaOrang(x.oleh))));
+  Object.values(V.cek||{}).forEach(c=>c&&c.oleh&&ver.add(namaOrang(c.oleh)));
+  const dp=h.parsed&&h.parsed.dipilih;if(dp&&dp.oleh)ver.add(namaOrang(dp.oleh));const fin=V.final;
+  return{unggah:namaOrang(h.parsed&&h.parsed.oleh),fisik:ff&&ff.oleh?namaOrang(ff.oleh):"",fin:fin?namaOrang(fin.oleh):"",finT:fin?fmtT(fin.t):"",terlibat:[...ver].join(", "),status:fin?"Terverifikasi":"Belum diverifikasi"}}
+async function tombolFinal(h){const f=verFinal(h);
+  if(f){if(!await konfirmasi({judul:`Batalkan verifikasi <em>${esc(h.nama)}</em>?`,pesan:`Diverifikasi oleh <b>${esc(namaOrang(f.oleh))}</b> · ${esc(fmtT(f.t))}. Status kembali menjadi belum diverifikasi.`,ok:"Ya, batalkan",jenis:"info"}))return;setFinal(h,false);render();toast("Verifikasi "+h.nama+" dibatalkan");return}
+  const sisa=h.berkas.filter(sisaCek).length,rf=rataFisik(h);
+  if(!await konfirmasi({judul:`Verifikasi nilai <em>${esc(h.nama)}</em>?`,pesan:`Nilai DA <b>${fmt(h.rata)}</b>${rf===null?" · nilai fisik <b>belum diisi</b>":` · fisik <b>${fmt(rf)}</b> · total <b>${fmt((rf+h.rata)/2)}</b>`}. Nama kamu (<b>${esc(namaOrang(siapa()))}</b>) dicatat sebagai verifikator.`,
+    catatan:sisa||rf===null?[sisa?`Masih ada ${sisa} berkas yang perlu dicek.`:"",rf===null?"Nilai fisik belum diisi.":""].filter(Boolean).join(" ")+" Tetap verifikasi?":"",ok:"Ya, verifikasi",jenis:"info"}))return;
+  setFinal(h,true);render();toast(h.nama+" diverifikasi")}
+function setKoreksi(h,no,c,o){const V=verGet(h);bukaFinal(V,h);V.kor[no]=V.kor[no]||{};if(o)V.kor[no][c]=o;else{delete V.kor[no][c];if(!Object.keys(V.kor[no]).length)delete V.kor[no]}verSimpan(h)}
+function setCek(h,no,on){const V=verGet(h);if(!on)bukaFinal(V,h);if(on)V.cek[no]={oleh:siapa(),t:new Date().toISOString()};else delete V.cek[no];verSimpan(h)}
 const fmtT=t=>{try{return new Date(t).toLocaleString("id-ID",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}catch(e){return""}};
 function dialogKoreksi(h,b,c){
   const k=kunciJab(h.jab)[b.no-1]||{},kor=b.kor[c],auto=kor?kor.auto:b.S[c],jw=JAWAB[c]?String(b.jaw[JAWAB[c]]||""):c==="Y"?b.jaw.uraian:"";
@@ -439,14 +455,14 @@ function vRekap(v,hasil){
   rows.forEach(o=>o.d=pesertaDari(o.h));
   rows=rows.filter(o=>!q||o.h.nama.toLowerCase().includes(q)||o.h.file.toLowerCase().includes(q)||(o.d&&(o.d.nama+" "+o.d.instansi).toLowerCase().includes(q)));
   const JENIS=[...new Set(DAFTAR.map(d=>d.jenis).filter(Boolean))];if(UI.fjenis&&UI.fjenis!=="semua")rows=rows.filter(o=>UI.fjenis==="—"?!o.d:o.d&&o.d.jenis===UI.fjenis);
-  rows=rows.filter(o=>UI.filter==="semua"||(UI.filter==="fbelum"&&o.rf===null)||(UI.filter==="fsudah"&&o.rf!==null)||(UI.filter==="cek"&&perluCek(o.h))||(UI.filter==="versi"&&nVersi(o.h))||(UI.filter==="vbelum"&&nVersi(o.h)&&(!o.h.parsed.dipilih||o.h.parsed.adaBaru)));
+  rows=rows.filter(o=>UI.filter==="semua"||(UI.filter==="fbelum"&&o.rf===null)||(UI.filter==="fsudah"&&o.rf!==null)||(UI.filter==="cek"&&perluCek(o.h))||(UI.filter==="vsudah"&&verFinal(o.h))||(UI.filter==="vbelum2"&&!verFinal(o.h))||(UI.filter==="versi"&&nVersi(o.h))||(UI.filter==="vbelum"&&nVersi(o.h)&&(!o.h.parsed.dipilih||o.h.parsed.adaBaru)));
   const R=UI.rs,val=o=>R.k==="total"?(o.tot??-1):R.k==="da"?o.h.rata:R.k==="fisik"?(o.rf??-1):/^b\d$/.test(R.k)?(o.h.berkas[+R.k[1]]||{}).da??-1:0;
   rows.sort((a,b)=>R.k==="nama"?R.d*a.h.nama.localeCompare(b.h.nama):(R.d*(val(a)-val(b))||a.h.nama.localeCompare(b.h.nama)));
   const OPS=[["total:-1","Nilai total tertinggi"],["total:1","Nilai total terendah"],["da:-1","Nilai DA tertinggi"],["da:1","Nilai DA terendah"],["nama:1","Nama A–Z"],["nama:-1","Nama Z–A"]],cur=R.k+":"+R.d;
   v.innerHTML=`<div class="panel"><div class="toolbar">
     <div class="search">${ICON_SEARCH}<input id="q" placeholder="Cari nama peserta…" value="${esc(UI.q)}"></div>
     ${JENIS.length?`<div class="field"><label>Jenis sertifikasi</label><select id="fjn">${[["semua","Semua jenis"],...JENIS.map(j=>[j,j]),["—","Tidak ada di daftar"]].map(([k,l])=>`<option value="${esc(k)}" ${(UI.fjenis||"semua")===k?"selected":""}>${esc(l)}</option>`).join("")}</select></div>`:""}
-    <div class="field"><label>Status</label><select id="flt">${[["semua","Semua peserta"],["fbelum","Fisik belum dinilai"],["fsudah","Fisik selesai"],["cek","Perlu dicek"],["versi","Punya beberapa versi file"],["vbelum","Versi belum dipilih verifikator"]].map(([k,l])=>`<option value="${k}" ${UI.filter===k?"selected":""}>${l}</option>`).join("")}</select></div>
+    <div class="field"><label>Status</label><select id="flt">${[["semua","Semua peserta"],["fbelum","Fisik belum dinilai"],["fsudah","Fisik selesai"],["cek","Perlu dicek"],["vbelum2","Belum diverifikasi"],["vsudah","Sudah diverifikasi"],["versi","Punya beberapa versi file"],["vbelum","Versi belum dipilih verifikator"]].map(([k,l])=>`<option value="${k}" ${UI.filter===k?"selected":""}>${l}</option>`).join("")}</select></div>
     <div class="field"><label>Urutkan</label><select id="srt">${OPS.some(o=>o[0]===cur)?"":`<option selected>Sesuai kolom yang diklik</option>`}${OPS.map(([k,l])=>`<option value="${k}" ${cur===k?"selected":""}>${l}</option>`).join("")}</select></div>
     <button class="btn" id="dlKorR" title="Unduh semua koreksi nilai dan status cek (semua jabatan) ke Excel">Unduh hasil koreksi</button>
     ${!window.ONLINE||ONL.admin?`<button class="btn danger" id="rstR" title="Hapus semua peserta ${esc(JAB[JAKTIF].label)} beserta nilai fisik, koreksi, dan tanda cek">Hapus semua peserta</button>`:""}
@@ -455,7 +471,7 @@ function vRekap(v,hasil){
   ${rows.map((o,i)=>`<tr><td class="n sub">${i+1}</td><td><span class="nm" data-k="${esc(fKey(o.h))}">${esc(o.d?o.d.nama:o.h.nama)}</span>${!window.ONLINE||ONL.admin?`<button class="hpb" data-del="${esc(fKey(o.h))}" title="Hapus peserta ini (mis. salah upload)">Hapus</button>`:""}${nVersi(o.h)?` <button class="pill ${o.h.parsed.adaBaru?"warn":o.h.parsed.dipilih?"ok":"bad"} pbtn" data-ver="${esc(fKey(o.h))}" title="Ada beberapa versi file — klik untuk membandingkan dan memilih">${nVersi(o.h)+1} versi${o.h.parsed.adaBaru?" · ada baru":o.h.parsed.dipilih?" · ditetapkan":" · belum dipilih"}</button>`:""}${o.d?`<div class="sub">${esc([o.d.jenis,o.d.instansi].filter(Boolean).join(" · "))}${o.d.nama!==o.h.nama?` · file: ${esc(o.h.file)}`:""}</div>`:DAFTAR.length?`<div class="sub" style="color:var(--amber)">tidak ada di daftar peserta</div>`:""}${o.h.catatan.length?`<div class="sub" style="color:var(--red)">${esc(o.h.catatan[0])}${o.h.catatan.length>1?` (+${o.h.catatan.length-1})`:""}</div>`:""}</td>
     ${o.h.berkas.map(b=>`<td class="n"><span class="sc ${cls(b.da)}">${fmt(b.da)}</span></td>`).join("")}
     <td class="n big">${fmt(o.h.rata)}</td><td class="n">${o.rf===null?`<button class="btn sm ghost" data-f="${esc(fKey(o.h))}">Nilai fisik</button>`:fmt(o.rf)}</td><td class="n big">${fmt(o.tot)}</td>
-    <td>${o.rf===null?'<span class="pill no">Fisik belum</span>':'<span class="pill ok">Lengkap</span>'} ${perluCek(o.h)?'<span class="pill warn">Perlu dicek</span>':""}</td></tr>`).join("")}
+    <td>${o.rf===null?'<span class="pill no">Fisik belum</span>':'<span class="pill ok">Lengkap</span>'} ${perluCek(o.h)?'<span class="pill warn">Perlu dicek</span>':""}${(f=>f?` <button class="pill ok pbtn" data-fin="${esc(fKey(o.h))}" title="Diverifikasi ${esc(fmtT(f.t))} — klik untuk membatalkan">✓ Diverifikasi ${esc(namaOrang(f.oleh))}</button>`:` <button class="btn sm ghost" data-fin="${esc(fKey(o.h))}" title="Tandai nilai peserta ini sudah diverifikasi">Verifikasi</button>`)(verFinal(o.h))}</td></tr>`).join("")}
   </tbody></table>${rows.length?"":`<div class="empty">Tidak ada peserta yang cocok dengan filter.</div>`}</div>
   <div class="sub" style="margin-top:10px">${rows.length} dari ${hasil.length} peserta · klik nama untuk melihat rincian</div></div>`;
   const fjn=$("fjn");if(fjn)fjn.onchange=e=>{UI.fjenis=e.target.value;render()};
@@ -465,6 +481,7 @@ function vRekap(v,hasil){
   v.querySelectorAll("[data-f]").forEach(el=>el.onclick=()=>{FSEL=el.dataset.f;VIEW="fisik";render();window.scrollTo({top:0})});
   v.querySelectorAll("[data-del]").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.del);if(h)hapusPesertaSatu(h)});
   v.querySelectorAll("[data-ver]").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.ver);if(h)dialogVersi(h)});
+  v.querySelectorAll("[data-fin]").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.fin);if(h)tombolFinal(h)});
 }
 
 function vDetail(v,hasil,JA){
@@ -573,7 +590,7 @@ function unduhKoreksi(){
   // nilai DA tanpa koreksi: hitung ulang tanpa data verifikasi peserta itu
   const tanpaKoreksi=h=>{const k=fKey(h),simpan=VER[k];delete VER[k];const a=nilaiParsed(h.parsed,h.file,h.jab);if(simpan)VER[k]=simpan;return a};
   const D=[["No","Nama Peserta","NIP","Jabatan","File","Berkas","KKA Kunci","Komponen","Kunci","Jawaban Peserta","Nilai Otomatis","Alasan Otomatis","Nilai Koreksi","Selisih","Alasan Koreksi","Dikoreksi Oleh","Waktu Koreksi"]];
-  const R=[["No","Nama Peserta","NIP","Jabatan","File","Jumlah Koreksi","Rata DA Otomatis","Rata DA Setelah Koreksi","Selisih","Berkas Perlu Dicek","Berkas Sudah Dicek","Sisa Belum Dicek","Nilai Fisik","Nilai Total (setelah koreksi)","Penilai"]];
+  const R=[["No","Nama Peserta","NIP","Jabatan","File","Jumlah Koreksi","Rata DA Otomatis","Rata DA Setelah Koreksi","Selisih","Berkas Perlu Dicek","Berkas Sudah Dicek","Sisa Belum Dicek","Nilai Fisik","Nilai Total (setelah koreksi)","Diunggah Oleh","Nilai Fisik Oleh","Status Verifikasi","Diverifikasi Oleh","Waktu Verifikasi","Koreksi/Cek Oleh"]];
   const C=[["No","Nama Peserta","Jabatan","Berkas","KKA Kunci","Cara Dipadankan","Perlu Dicek","Sudah Dicek","Dicek Oleh","Waktu Cek"]];
   const VS=[["No","Nama Peserta","NIP","Jabatan","Status","File","Tanggal File","Diunggah","Diunggah Oleh","Rata DA","Status Pilihan","Dipilih Oleh","Waktu Dipilih"]];let nv=0;
   orang.filter(h=>nVersi(h)).forEach(h=>{const dp=h.parsed.dipilih,no=++nv;
@@ -584,19 +601,19 @@ function unduhKoreksi(){
     const KJh=kunciJab(h.jab),kor=h.berkas.flatMap(b=>Object.entries(b.kor||{}).map(([c,o])=>({b,c,o}))),cekB=h.berkas.filter(cekBerkas),sudah=h.berkas.filter(b=>b.cek);
     kor.forEach(({b,c,o})=>D.push([++n,nm(h),nip(h),JAB[h.jab].label,h.file,b.no,b.kkKunci,c+" "+KOMP[c],kunciTeks(KJh[b.no-1]||{},c),jawab(b,c),o.auto,o.autoD||"",o.v,Math.round((o.v-o.auto)*100)/100,o.alasan||"",o.oleh||"",o.t?fmtT(o.t):""]));
     h.berkas.forEach(b=>{if(cekBerkas(b)||b.cek)C.push([++nc,nm(h),JAB[h.jab].label,b.no,b.kkKunci,b.cara,cekBerkas(b)?"Ya":"Tidak",b.cek?"Ya":"Belum",b.cek?b.cek.oleh:"",b.cek?fmtT(b.cek.t):""])});
-    if(!kor.length&&!sudah.length&&!cekB.length)return;
+    if(!kor.length&&!sudah.length&&!cekB.length&&!verFinal(h))return;
     const auto=kor.length?tanpaKoreksi(h).rata:h.rata,rf=rataFisik(h),pen=[...new Set(kor.map(x=>x.o.oleh).concat(sudah.map(b=>b.cek.oleh)).filter(Boolean))].join(", ");
-    R.push([++nr,nm(h),nip(h),JAB[h.jab].label,h.file,kor.length,Math.round(auto*100)/100,Math.round(h.rata*100)/100,Math.round((h.rata-auto)*100)/100,cekB.length,sudah.length,cekB.filter(b=>!b.cek).length,rf===null?"belum":Math.round(rf*100)/100,rf===null?"":Math.round((rf+h.rata)/2*100)/100,pen]);
+    R.push([++nr,nm(h),nip(h),JAB[h.jab].label,h.file,kor.length,Math.round(auto*100)/100,Math.round(h.rata*100)/100,Math.round((h.rata-auto)*100)/100,cekB.length,sudah.length,cekB.filter(b=>!b.cek).length,rf===null?"belum":Math.round(rf*100)/100,rf===null?"":Math.round((rf+h.rata)/2*100)/100,...(p=>[p.unggah,p.fisik,p.status,p.fin,p.finT,p.terlibat])(infoPenilai(h))]);
   });
-  if(n===0&&nc===0&&nv===0){toast("Belum ada koreksi, berkas yang perlu dicek, atau file berversi");return}
+  if(n===0&&nc===0&&nv===0&&nr===0){toast("Belum ada koreksi, berkas yang perlu dicek, atau file berversi");return}
   const wb=XLSX.utils.book_new();
   const lebar=(ws,w)=>{ws["!cols"]=w.map(x=>({wch:x}));ws["!autofilter"]={ref:ws["!ref"]};ws["!freeze"]={xSplit:2,ySplit:1}};
-  const w1=XLSX.utils.aoa_to_sheet(R);lebar(w1,[5,30,20,22,30,9,12,14,9,10,10,10,10,14,26]);XLSX.utils.book_append_sheet(wb,w1,"Ringkasan");
+  const w1=XLSX.utils.aoa_to_sheet(R);lebar(w1,[5,30,20,22,30,9,12,14,9,10,10,10,10,14,18,18,16,22,16,30]);XLSX.utils.book_append_sheet(wb,w1,"Ringkasan");
   const w2=XLSX.utils.aoa_to_sheet(D);lebar(w2,[5,30,20,20,28,7,11,26,40,40,10,34,10,8,36,26,16]);XLSX.utils.book_append_sheet(wb,w2,"Detail Koreksi");
   const w3=XLSX.utils.aoa_to_sheet(C);lebar(w3,[5,30,20,7,11,34,9,10,26,16]);XLSX.utils.book_append_sheet(wb,w3,"Status Cek");
   if(nv){const w5=XLSX.utils.aoa_to_sheet(VS);lebar(w5,[5,30,20,20,11,34,18,18,24,9,30,26,16]);XLSX.utils.book_append_sheet(wb,w5,"Versi File")}
   const info=[["Hasil koreksi penilaian ujian praktik"],["Kunci",KUNCI_SRC],["Diunduh",new Date().toLocaleString("id-ID")],["Oleh",siapa()],[""],
-    ["Jumlah koreksi nilai",n],["Peserta dengan koreksi/cek",nr],["Berkas perlu dicek",C.slice(1).filter(r=>r[6]==="Ya").length],["Berkas sudah dicek",C.slice(1).filter(r=>r[7]==="Ya").length],["Peserta dengan beberapa versi file",nv],["Versi belum dipilih verifikator",orang.filter(h=>nVersi(h)&&(!h.parsed.dipilih||h.parsed.adaBaru)).length],[""],
+    ["Jumlah koreksi nilai",n],["Peserta dengan koreksi/cek",nr],["Berkas perlu dicek",C.slice(1).filter(r=>r[6]==="Ya").length],["Berkas sudah dicek",C.slice(1).filter(r=>r[7]==="Ya").length],["Peserta terverifikasi",orang.filter(verFinal).length+" dari "+orang.length],["Peserta dengan beberapa versi file",nv],["Versi belum dipilih verifikator",orang.filter(h=>nVersi(h)&&(!h.parsed.dipilih||h.parsed.adaBaru)).length],[""],
     ["Catatan","Nilai Otomatis = hasil hitung tool; Nilai Koreksi = nilai yang ditetapkan penilai. Rata DA Setelah Koreksi dipakai di rekap dan Excel penilaian."]];
   const w4=XLSX.utils.aoa_to_sheet(info);w4["!cols"]=[{wch:28},{wch:70}];XLSX.utils.book_append_sheet(wb,w4,"Info");
   const tgl=new Date().toISOString().slice(0,10);
@@ -622,14 +639,14 @@ function unduh(){
       ...C.map(c=>b.D[c]),ff&&ff.selesai?ff.b[bi].cat:"",Object.entries(b.kor||{}).map(([c,k])=>`${c}: ${k.auto}→${k.v} (${k.alasan}; ${k.oleh})`).join(" | "),b.cek?b.cek.oleh+" "+fmtT(b.cek.t):""]);
   }));
   const nB=KUNCI.length;
-  const R=[["No","Nama","File","Jabatan","Rata-rata Fisik Berkas","Rata-rata Daftar Arsip","NILAI TOTAL","Status Fisik","Catatan","Nama (daftar)","NIP","Instansi","Jabatan Saat Ini","Tujuan Sertifikasi","Kategori","Jenis Sertifikasi"]];
+  const R=[["No","Nama","File","Jabatan","Rata-rata Fisik Berkas","Rata-rata Daftar Arsip","NILAI TOTAL","Status Fisik","Catatan","Nama (daftar)","NIP","Instansi","Jabatan Saat Ini","Tujuan Sertifikasi","Kategori","Jenis Sertifikasi","Diunggah Oleh","Nilai Fisik Oleh","Status Verifikasi","Diverifikasi Oleh","Waktu Verifikasi","Koreksi/Cek Oleh"]];
   hasil.slice().sort((a,b)=>b.rata-a.rata).forEach((h,i)=>{const x=i+2,rf=rataFisik(h);
     R.push([i+1,h.nama,h.file,JAB[h.jab].label,
       {t:"n",v:r2(rf||0),f:`SUMIFS(Penilaian!$I:$I,Penilaian!$B:$B,C${x})/${nB}`},
       {t:"n",v:r2(h.rata),f:`SUMIFS(Penilaian!$${cAK}:$${cAK},Penilaian!$B:$B,C${x})/${nB}`},
       {t:"n",v:r2(((rf||0)+h.rata)/2),f:`(E${x}+F${x})/2`},
       {t:"s",v:rf===null?"Fisik belum lengkap":"Lengkap",f:`IF(COUNTIFS(Penilaian!$B:$B,C${x},Penilaian!$F:$F,"<>")+COUNTIFS(Penilaian!$B:$B,C${x},Penilaian!$G:$G,"<>")+COUNTIFS(Penilaian!$B:$B,C${x},Penilaian!$H:$H,"<>")<${nB*3},"Fisik belum lengkap","Lengkap")`},
-      h.catatan.join("; "),...(d=>d?[d.nama,d.nip,d.instansi,d.jabatanKini||"",d.tujuan,kategoriTujuan(d.tujuan),d.jenis]:["(tidak ada di daftar)","","","","","",""])(pesertaDari(h))]);
+      h.catatan.join("; "),...(d=>d?[d.nama,d.nip,d.instansi,d.jabatanKini||"",d.tujuan,kategoriTujuan(d.tujuan),d.jenis]:["(tidak ada di daftar)","","","","","",""])(pesertaDari(h)),...(p=>[p.unggah,p.fisik,p.status,p.fin,p.finT,p.terlibat])(infoPenilai(h))]);
   });
   const K=[["No","KK","Indeks","Uraian Informasi Berkas","Unsur Uraian (penilaian Y)","Kurun","Jumlah","SKKA","Aktif","Inaktif","Nasib Akhir","Usul Pindah","Usul Musnah","Usul Serah"],
     ...KUNCI.map(k=>{const s=statusUsul(k,usulEksplisit(KUNCI));return[k.no,k.kk,k.indeks,k.uraian,k.unsur,k.kurun,k.jumlah,k.skka,k.aktif,k.inaktif,k.nasib,s.pindah?"Ya":"Tidak",s.musnah?"Ya":"Tidak",s.serah?"Ya":"Tidak"]})];
