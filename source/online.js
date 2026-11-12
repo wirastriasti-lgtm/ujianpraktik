@@ -5,6 +5,10 @@ window.ONLINE=true;
 const SB_URL="https://akarxmsrsvyroovzqgcw.supabase.co";
 const SB_KEY="sb_publishable_HRIOy7IV-sAQvvGr0hFa1A_6aEqLqXc";
 
+// nama pengguna tanpa email → disimpan sebagai <nama>@penilai.local di Supabase Auth
+const keEmail=v=>{v=String(v||"").trim().toLowerCase();return v.includes("@")?v:v+"@penilai.local"};
+const namaAkun=e=>String(e||"").replace(/@penilai\.local$/,"");
+function buatPassword(){const a="abcdefghjkmnpqrstuvwxyz23456789",r=new Uint32Array(10);crypto.getRandomValues(r);return[...r].map((x,i)=>(i===4?"-":"")+a[x%a.length]).join("")}
 const ONL={
   sb:null,email:"",nama:"",admin:false,kunciId:null,kunciList:[],tim:[],ch:null,
   pending:{},timer:{},sync:"ok",renderTunda:false,
@@ -29,19 +33,19 @@ const ONL={
     document.querySelector(".wrap").style.display="none";document.getElementById("dl").style.display="none";document.getElementById("jnav").style.visibility="hidden";
     let el=document.getElementById("login");if(!el){el=document.createElement("div");el.id="login";document.body.appendChild(el)}
     const judul={masuk:"Masuk untuk <em>menilai</em>.",daftar:"Buat akun <em>penilai</em>.",lupa:"Atur ulang <em>password</em>.",baru:"Password <em>baru</em>.",tolak:"Akses <em>belum dibuka</em>."}[mode];
-    const lead={masuk:"Gunakan email yang sudah didaftarkan admin di Tim penilai.",daftar:"Pakai email yang sudah didaftarkan admin. Setelah daftar, buka email konfirmasi dari Supabase, lalu kembali ke sini untuk masuk.",lupa:"Kami kirim tautan atur ulang password ke email kamu.",baru:"Ketik password baru untuk akun ini.",tolak:""}[mode];
+    const lead={masuk:"Masuk dengan nama pengguna dan password dari admin (atau email, bila akunmu memakai email).",daftar:"Pakai email yang sudah didaftarkan admin. Setelah daftar, buka email konfirmasi dari Supabase, lalu kembali ke sini untuk masuk.",lupa:"Akun dengan nama pengguna: minta admin mengatur ulang password di menu Tim penilai. Akun dengan email: kami kirim tautan atur ulang ke email kamu.",baru:"Ketik password baru untuk akun ini.",tolak:""}[mode];
     el.innerHTML=`<div class="lbox"><div class="eyebrow">Ujian praktik sertifikasi</div><h1 class="sm">${judul}</h1><p class="lead sm">${pesan||lead}</p>
       ${mode==="tolak"?`<button class="btn" id="lOut">Keluar</button>`:`<form id="lf">
-      ${mode!=="baru"?`<label>Email<input type="email" id="lE" required autocomplete="email"></label>`:""}
+      ${mode!=="baru"?`<label>${mode==="masuk"?"Nama pengguna atau email":"Email"}<input type="${mode==="masuk"?"text":"email"}" id="lE" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>`:""}
       ${mode!=="lupa"?`<label>Password<input type="password" id="lP" required minlength="8" autocomplete="${mode==="masuk"?"current-password":"new-password"}"></label>`:""}
       <button class="btn pri" type="submit" id="lGo">${{masuk:"Masuk",daftar:"Daftar",lupa:"Kirim tautan",baru:"Simpan password"}[mode]}</button></form>
-      <div class="lalt">${mode==="masuk"?`<button class="btn ghost sm" data-m="daftar">Belum punya akun? Daftar</button><button class="btn ghost sm" data-m="lupa">Lupa password</button>`:mode!=="baru"?`<button class="btn ghost sm" data-m="masuk">← Kembali ke masuk</button>`:""}</div>`}
+      <div class="lalt">${mode==="masuk"?`<button class="btn ghost sm" data-m="lupa">Lupa password</button>`:mode!=="baru"?`<button class="btn ghost sm" data-m="masuk">← Kembali ke masuk</button>`:""}</div>`}
       <div class="lmsg" id="lMsg"></div></div>`;
     el.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>this.layarLogin(b.dataset.m));
     const out=document.getElementById("lOut");if(out)out.onclick=()=>this.sb.auth.signOut();
     const f=document.getElementById("lf");if(!f)return;
     f.onsubmit=async ev=>{ev.preventDefault();const msg=document.getElementById("lMsg"),go=document.getElementById("lGo");go.disabled=true;msg.textContent="Memproses…";
-      const E=(document.getElementById("lE")||{}).value,P=(document.getElementById("lP")||{}).value,redirect=location.origin+location.pathname;
+      const E=keEmail((document.getElementById("lE")||{}).value),P=(document.getElementById("lP")||{}).value,redirect=location.origin+location.pathname;
       try{
         if(mode==="masuk"){const{data,error}=await this.sb.auth.signInWithPassword({email:E,password:P});if(error)throw error;await this.setelahLogin(data.session)}
         else if(mode==="daftar"){const{data,error}=await this.sb.auth.signUp({email:E,password:P,options:{emailRedirectTo:redirect}});if(error)throw error;
@@ -51,14 +55,14 @@ const ONL={
       }catch(e){msg.textContent=this.pesanError(e);go.disabled=false}};
   },
   pesanError(e){const m=String(e&&e.message||e);
-    if(/invalid login/i.test(m))return"Email atau password salah.";if(/not confirmed/i.test(m))return"Email belum dikonfirmasi. Buka email konfirmasi dari Supabase dulu.";
+    if(/invalid login/i.test(m))return"Nama pengguna/email atau password salah.";if(/not confirmed/i.test(m))return"Email belum dikonfirmasi. Buka email konfirmasi dari Supabase dulu.";
     if(/already registered/i.test(m))return"Email ini sudah terdaftar. Silakan masuk atau pakai Lupa password.";if(/rate limit/i.test(m))return"Terlalu banyak percobaan. Tunggu beberapa menit.";return m},
 
   async setelahLogin(session){
     this.email=String(session.user.email||"").toLowerCase();
     const{data:me,error}=await this.sb.from("penilai").select("*").eq("email",this.email).maybeSingle();
-    if(error||!me)return this.layarLogin("tolak",`Email <b>${esc(this.email)}</b> belum terdaftar sebagai penilai. Minta admin menambahkannya di menu Tim penilai, lalu muat ulang halaman ini.`);
-    this.nama=me.nama||this.email;this.admin=me.peran==="admin";
+    if(error||!me)return this.layarLogin("tolak",`Akun <b>${esc(namaAkun(this.email))}</b> belum terdaftar sebagai penilai. Minta admin menambahkannya di menu Tim penilai, lalu muat ulang halaman ini.`);
+    this.nama=me.nama||namaAkun(this.email);this.admin=me.peran==="admin";
     const l=document.getElementById("login");if(l)l.remove();
     document.querySelector(".wrap").style.display="";document.getElementById("dl").style.display="";document.getElementById("jnav").style.visibility="";
     this.pasangHeader();
@@ -236,25 +240,37 @@ const ONL={
   },
 
   /* ---------- tim penilai ---------- */
+  // akun tanpa email: admin membuat nama pengguna + password lewat edge function kelola-penilai
+  async kelola(body){const{data,error}=await this.sb.functions.invoke("kelola-penilai",{body});
+    if(error){let m=error.message;try{const j=await error.context.json();if(j&&j.error)m=j.error}catch(e){}throw new Error(m)}
+    if(data&&data.error)throw new Error(data.error);return data},
+  async tampilPassword(judul,pengguna,pw){
+    if(await konfirmasi({judul,pesan:`Berikan ke penilai:<br>Alamat: <b>${esc(location.origin+location.pathname)}</b><br>Nama pengguna: <b>${esc(pengguna)}</b><br>Password: <b style="font-family:monospace;font-size:15px">${esc(pw)}</b>`,
+      catatan:"Password hanya tampil sekali ini. Salin sekarang; bila lupa, atur ulang dari menu ini.",ok:"Salin semua",batal:"Tutup",jenis:"info"}))
+      try{await navigator.clipboard.writeText(`Penilaian Ujian Praktik\n${location.origin+location.pathname}\nNama pengguna: ${pengguna}\nPassword: ${pw}`);toast("Disalin")}catch(e){toast("Tidak bisa menyalin otomatis — salin manual")}},
   async vTim(v){
     v.innerHTML=`<div class="panel"><div class="sub">Memuat…</div></div>`;
     const{data,error}=await this.sb.from("penilai").select("*").order("created_at");
     if(error){v.innerHTML=`<div class="panel">${esc(error.message)}</div>`;return}
     v.innerHTML=`<div class="panel">
-      ${this.admin?`<form id="tf" class="toolbar"><div class="field" style="flex:1;min-width:220px"><label>Email</label><input id="tE" type="email" required class="tin"></div>
-        <div class="field" style="flex:1;min-width:180px"><label>Nama</label><input id="tN" class="tin"></div>
+      ${this.admin?`<form id="tf" class="toolbar" autocomplete="off"><div class="field" style="flex:1;min-width:170px"><label>Nama pengguna</label><input id="tU" required class="tin" placeholder="mis. budi.s" pattern="[A-Za-z0-9][A-Za-z0-9._\\-]{2,39}" title="3–40 karakter: huruf, angka, titik, garis bawah, strip" autocapitalize="none" spellcheck="false"></div>
+        <div class="field" style="flex:1;min-width:180px"><label>Nama lengkap</label><input id="tN" class="tin" placeholder="mis. Budi Santoso"></div>
         <div class="field"><label>Peran</label><select id="tR"><option value="penilai">Penilai</option><option value="admin">Admin</option></select></div>
-        <button class="btn pri" type="submit">Tambah penilai</button></form>`:""}
-      <div class="tw"><table><thead><tr><th>Email</th><th>Nama</th><th>Peran</th><th></th></tr></thead><tbody>
-      ${data.map(p=>`<tr><td><b>${esc(p.email)}</b></td><td>${esc(p.nama||"")}</td><td><span class="pill ${p.peran==="admin"?"ok":"no"}">${p.peran}</span></td>
-        <td class="n">${this.admin&&p.email!==this.email?`<button class="btn sm ghost" data-del="${esc(p.email)}">Hapus</button>`:""}</td></tr>`).join("")}
+        <div class="field" style="min-width:170px"><label>Password</label><input id="tP" class="tin" minlength="8" required value="${buatPassword()}" style="font-family:monospace"></div>
+        <button class="btn pri" type="submit" id="tGo">Buat akun</button></form>`:""}
+      <div class="tw"><table><thead><tr><th>Nama pengguna / email</th><th>Nama</th><th>Peran</th><th></th></tr></thead><tbody>
+      ${data.map(p=>`<tr><td><b>${esc(namaAkun(p.email))}</b>${/@penilai\.local$/.test(p.email)?"":` <span class="sub">(email)</span>`}</td><td>${esc(p.nama||"")}</td><td><span class="pill ${p.peran==="admin"?"ok":"no"}">${p.peran}</span></td>
+        <td class="n" style="white-space:nowrap">${this.admin?`<button class="btn sm ghost" data-pw="${esc(p.email)}">Atur password</button>`:""}${this.admin&&p.email!==this.email?` <button class="btn sm ghost" data-del="${esc(p.email)}">Hapus</button>`:""}</td></tr>`).join("")}
       </tbody></table></div>
-      <p class="sub" style="margin-top:12px">Penilai baru: tambahkan emailnya di sini, lalu minta ia membuka alamat tool ini, pilih <b>Daftar</b>, dan konfirmasi lewat email.</p></div>`;
+      <p class="sub" style="margin-top:12px">Penilai baru tidak perlu email: buat nama pengguna dan password di sini, lalu bagikan ke penilai. Penilai masuk dengan nama pengguna dan password itu.</p></div>`;
     const f=document.getElementById("tf");
-    if(f)f.onsubmit=async ev=>{ev.preventDefault();const em=document.getElementById("tE").value.trim().toLowerCase();
-      const{error}=await this.sb.from("penilai").insert({email:em,nama:document.getElementById("tN").value.trim()||null,peran:document.getElementById("tR").value});
-      if(error)toast(/duplicate/i.test(error.message)?"Email sudah terdaftar":error.message);else{toast(em+" ditambahkan");this.vTim(v)}};
-    v.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(!await konfirmasi({judul:`Hapus <em>${esc(b.dataset.del)}</em> dari tim penilai?`,pesan:"Akun ini tidak bisa lagi membuka data penilaian. Nilai yang sudah ia masukkan tetap tersimpan.",ok:"Ya, hapus penilai"}))return;
-      const{error}=await this.sb.from("penilai").delete().eq("email",b.dataset.del);if(error)toast(error.message);else this.vTim(v)});
+    if(f)f.onsubmit=async ev=>{ev.preventDefault();const go=document.getElementById("tGo"),u=document.getElementById("tU").value.trim().toLowerCase(),pw=document.getElementById("tP").value;go.disabled=true;
+      try{await this.kelola({aksi:"buat",pengguna:u,nama:document.getElementById("tN").value.trim(),peran:document.getElementById("tR").value,password:pw});
+        await this.vTim(v);await this.tampilPassword(`Akun <em>${esc(u)}</em> dibuat`,u,pw)}catch(e){toast(e.message);go.disabled=false}};
+    v.querySelectorAll("[data-pw]").forEach(b=>b.onclick=async()=>{const em=b.dataset.pw,u=namaAkun(em);
+      if(!await konfirmasi({judul:`Atur ulang password <em>${esc(u)}</em>?`,pesan:"Password lama tidak berlaku lagi. Password baru dibuat otomatis dan ditampilkan sekali.",ok:"Buat password baru",jenis:"info"}))return;
+      const pw=buatPassword();try{await this.kelola({aksi:em.endsWith("@penilai.local")?"reset":"buat",email:em,password:pw,nama:(data.find(x=>x.email===em)||{}).nama,peran:(data.find(x=>x.email===em)||{}).peran});await this.tampilPassword(`Password baru <em>${esc(u)}</em>`,em.endsWith("@penilai.local")?u:em,pw)}catch(e){toast(e.message)}});
+    v.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(!await konfirmasi({judul:`Hapus <em>${esc(namaAkun(b.dataset.del))}</em> dari tim penilai?`,pesan:"Akun ini tidak bisa lagi membuka data penilaian. Nilai yang sudah ia masukkan tetap tersimpan.",ok:"Ya, hapus penilai"}))return;
+      try{await this.kelola({aksi:"hapus",email:b.dataset.del});this.vTim(v)}catch(e){toast(e.message)}});
   }
 };

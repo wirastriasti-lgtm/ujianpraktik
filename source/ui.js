@@ -33,7 +33,7 @@ function perluCek(h){return h.berkas.some(sisaCek)||(h.catatan.length>0&&!h.berk
 /* ================= VERIFIKASI: koreksi nilai & tanda sudah dicek ================= */
 const VKEY="verifikasiPraktik_v1";
 var VER={};if(!window.ONLINE)try{VER=JSON.parse(localStorage.getItem(VKEY)||"{}")||{}}catch(e){VER={}}
-const siapa=()=>window.ONLINE&&ONL.email?ONL.email:"penilai";
+const siapa=()=>window.ONLINE&&ONL.email?String(ONL.email).replace(/@penilai\.local$/,""):"penilai";
 function verGet(h){return VER[fKey(h)]||(VER[fKey(h)]={kor:{},cek:{}})}
 function verSimpan(h){const k=fKey(h);if(window.ONLINE)ONL.simpanVer(h,VER[k]);else try{localStorage.setItem(VKEY,JSON.stringify(VER))}catch(e){}
   const i=semua.findIndex(x=>fKey(x)===k);if(i>=0)semua[i]=nilaiParsed(semua[i].parsed,semua[i].file,semua[i].jab)}
