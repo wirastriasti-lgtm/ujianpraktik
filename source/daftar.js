@@ -12,11 +12,15 @@ function jabDariTujuan(t){t=String(t||"").toLowerCase();
 /* ---------- baca file daftar peserta ---------- */
 // Sumber: template Excel, ekspor sistem, atau langsung surat pemanggilan (.docx, Lampiran I "Daftar Tujuan Surat dan Asesi").
 const DPOLA=[["fileHint",/nama\s*file|file\s*jawaban/i],["instansi",/tujuan\s*surat|instansi|unit\s*kerja|satuan\s*kerja|^asal|^unit/i],["nip",/^nip\b|\bnip$/i],
-  ["kini",/jabatan\s*(saat\s*ini|sekarang|terakhir|asal)/i],["jenis",/jenis|sertifikasi/i],["tujuan",/uji\s*kompetensi|tujuan\s*jabatan|jabatan\s*(yang\s*)?(dituju|tujuan)|^tujuan$|jenjang/i],
+  ["kini",/jabatan\s*(saat\s*ini|sekarang|terakhir|asal)/i],["tujuan",/uji\s*kompetensi|tujuan\s*(jabatan|sertifikasi)|jabatan\s*(yang\s*)?(dituju|tujuan)|^tujuan$|jenjang/i],["jenis",/^jenis|jenis\s*sertifikasi/i],
   ["nama",/^(nama(\s*(lengkap|peserta|asesi))?|asesi|peserta)$/i],["no",/^no\.?$/i]];
 // tujuan jabatan / uji kompetensi → kunci yang dipakai (PAD = Pengelolaan Arsip Dinamis dinilai dengan kunci Terampil/Mahir/PA)
+// Terampil, Mahir, PAD → kunci Terampil/Mahir/PA · Penyelia, Ahli Pertama → kunci Penyelia/Pertama · Ahli Muda (dan Madya) → kunci Muda
 function jabDariTujuan(t){t=String(t||"").toLowerCase();
-  if(/muda/.test(t))return"muda";if(/pertama|penyelia/.test(t))return"penyelia";if(/terampil|mahir|pelaksana|pengelola(an)?\s*arsip|\bpad\b/.test(t))return"terampil";return null}
+  if(/muda|madya/.test(t))return"muda";if(/pertama|penyelia/.test(t))return"penyelia";if(/terampil|mahir|pelaksana|pengelola(an)?\s*arsip|\bpad\b/.test(t))return"terampil";return null}
+// kategori tujuan sertifikasi: keahlian (pertama, muda, madya), keterampilan (terampil, mahir, penyelia), atau PAD
+function kategoriTujuan(t){t=String(t||"").toLowerCase();if(!t)return"";
+  if(/pengelola(an)?\s*arsip|\bpad\b/.test(t))return"PAD";if(/ahli|pertama|muda|madya|utama/.test(t))return"Keahlian";if(/terampil|mahir|penyelia/.test(t))return"Keterampilan";return""}
 // jenis sertifikasi bila tidak ada kolomnya: disimpulkan dari jabatan saat ini → uji kompetensi
 function jenisDariJabatan(kini,tujuan){const k=String(kini||"").toLowerCase(),t=String(tujuan||"").toLowerCase();if(!t)return"";
   if(/pengelola(an)?\s*arsip|\bpad\b/.test(t))return"Kompetensi Teknis (Pengelolaan Arsip Dinamis)";
@@ -59,7 +63,7 @@ function bacaGridPeserta(g,sumber){
     }
     if(!rows.length)continue;
     // kolom instansi yang isinya sama untuk semua baris (mis. "Tujuan Surat" = alamat surat, bukan instansi asal) diabaikan
-    if(rows.length>3&&rows.every(o=>o.instansi===rows[0].instansi)){if(rows[0].instansi)warn.push(`Kolom instansi berisi teks yang sama untuk semua peserta ("${rows[0].instansi.slice(0,60)}") — diabaikan.`);rows.forEach(o=>o.instansi="")}
+    if(rows.length>3&&/tujuan\s*surat/i.test(lab[col.instansi]||"")&&rows.every(o=>o.instansi===rows[0].instansi)){if(rows[0].instansi)warn.push(`Kolom instansi berisi teks yang sama untuk semua peserta ("${rows[0].instansi.slice(0,60)}") — diabaikan.`);rows.forEach(o=>o.instansi="")}
     const seen={};rows.forEach(o=>{const k=o.nip||normNama(o.nama);if(seen[k])warn.push(`${o.nama}: tercantum dua kali (no ${seen[k]} dan ${o.no})`);seen[k]=o.no});
     if(col.tujuan===undefined)warn.push("Kolom tujuan jabatan / uji kompetensi tidak ditemukan — jabatan tiap peserta dipilih saat upload jawaban.");
     if(disimpulkan)warn.push(`Jenis sertifikasi ${disimpulkan} peserta disimpulkan dari jabatan saat ini → uji kompetensi (PAD = kompetensi teknis; sudah Arsiparis = kenaikan jenjang; belum Arsiparis = perpindahan jabatan).`);
@@ -157,7 +161,7 @@ async function tambahKeDaftar(baru){
   return{masuk:masuk.length,lewat:baru.length-masuk.length};
 }
 /* ---------- tambah satu peserta manual ---------- */
-const TUJUAN_OPSI=["Arsiparis Terampil","Arsiparis Mahir","Arsiparis Penyelia","Arsiparis Ahli Pertama","Arsiparis Ahli Muda","Pengelolaan Arsip Dinamis"];
+const TUJUAN_OPSI=["Arsiparis Terampil","Arsiparis Mahir","Arsiparis Penyelia","Arsiparis Ahli Pertama","Arsiparis Ahli Muda","Arsiparis Ahli Madya","Pengelolaan Arsip Dinamis"];
 function dialogTambahPeserta(){
   return new Promise(res=>{
     const el=document.createElement("div");el.className="modal cf";
@@ -169,7 +173,7 @@ function dialogTambahPeserta(){
         <label class="mfield">Instansi<input id="tpI" placeholder="opsional"></label></div>
         <div class="tp2"><label class="mfield">Jabatan saat ini<input id="tpK" list="tpKL" placeholder="mis. Pelaksana"></label>
         <label class="mfield">Uji kompetensi / tujuan<select id="tpT" required><option value="">Pilih…</option>${TUJUAN_OPSI.map(t=>`<option>${t}</option>`).join("")}</select></label></div>
-        <datalist id="tpKL"><option>Pelaksana</option>${TUJUAN_OPSI.slice(0,5).map(t=>`<option>${t}</option>`).join("")}</datalist>
+        <datalist id="tpKL"><option>Pelaksana</option>${TUJUAN_OPSI.slice(0,6).map(t=>`<option>${t}</option>`).join("")}</datalist>
         <p class="sub" id="tpInfo" style="margin:-4px 0 0">Jenis sertifikasi dan kunci penilaian ditentukan otomatis.</p>
         <div class="cbar"><span style="flex:1"></span><button type="button" class="btn" data-t="batal">Batal</button><button class="btn pri" type="submit">Tambahkan</button></div></form></div>`;
     document.body.appendChild(el);requestAnimationFrame(()=>el.classList.add("in"));
@@ -254,7 +258,7 @@ function vDaftar(v){
   <div class="tw"><table><thead><tr><th class="n">No</th><th>Nama</th><th>Instansi</th><th>Jenis sertifikasi</th><th>Tujuan jabatan</th><th>File jawaban</th><th class="n">Nilai DA</th></tr></thead><tbody>
   ${rows.map(d=>{const h=d.file?semua.find(x=>x.file===d.file&&(x.jab===(d.jabPakai||d.jab)||!d.jab)):null;
     return`<tr><td class="n sub">${d.no}</td><td><b>${esc(d.nama)}</b>${d.nip?`<div class="sub">NIP ${esc(d.nip)}</div>`:""}</td><td>${esc(d.instansi)}</td><td>${esc(d.jenis)}</td>
-    <td>${esc(d.tujuan||"–")}${d.jabatanKini?`<div class="sub">dari ${esc(d.jabatanKini)}</div>`:""}<div class="sub">${d.jab?"dinilai "+esc(JAB[d.jab].label):'<span style="color:var(--amber)">jabatan belum jelas</span>'}</div></td>
+    <td>${esc(d.tujuan||"–")}${kategoriTujuan(d.tujuan)?` <span class="pill no">${kategoriTujuan(d.tujuan)}</span>`:""}${d.jabatanKini?`<div class="sub">dari ${esc(d.jabatanKini)}</div>`:""}<div class="sub">${d.jab?"dinilai "+esc(JAB[d.jab].label):'<span style="color:var(--amber)">jabatan belum jelas</span>'}</div></td>
     <td>${h?`<span class="pill ok">✓ ada</span> <span class="sub">${esc(h.file)}</span>${admin?` <button class="hpb" style="opacity:.7" data-lepas="${d.id}">lepas</button>`:""}`:`<span class="pill no">belum ada</span>${tanpa.length?` <select class="sm" data-link="${d.id}"><option value="">hubungkan ke file…</option>${tanpa.map(x=>`<option value="${esc(fKey(x))}">${esc(x.file)} (${esc(JAB[x.jab].label.split(" /")[0])})</option>`).join("")}</select>`:""}`}</td>
     <td class="n">${h?`<span class="sc ${cls(h.rata)}">${fmt(h.rata)}</span>`:"–"}</td></tr>`}).join("")}
   </tbody></table>${rows.length?"":`<div class="empty">Tidak ada peserta yang cocok dengan filter.</div>`}</div>

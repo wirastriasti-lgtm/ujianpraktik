@@ -622,14 +622,14 @@ function unduh(){
       ...C.map(c=>b.D[c]),ff&&ff.selesai?ff.b[bi].cat:"",Object.entries(b.kor||{}).map(([c,k])=>`${c}: ${k.auto}→${k.v} (${k.alasan}; ${k.oleh})`).join(" | "),b.cek?b.cek.oleh+" "+fmtT(b.cek.t):""]);
   }));
   const nB=KUNCI.length;
-  const R=[["No","Nama","File","Jabatan","Rata-rata Fisik Berkas","Rata-rata Daftar Arsip","NILAI TOTAL","Status Fisik","Catatan","Nama (daftar)","NIP","Instansi","Jabatan Saat Ini","Jenis Sertifikasi","Tujuan Jabatan"]];
+  const R=[["No","Nama","File","Jabatan","Rata-rata Fisik Berkas","Rata-rata Daftar Arsip","NILAI TOTAL","Status Fisik","Catatan","Nama (daftar)","NIP","Instansi","Jabatan Saat Ini","Tujuan Sertifikasi","Kategori","Jenis Sertifikasi"]];
   hasil.slice().sort((a,b)=>b.rata-a.rata).forEach((h,i)=>{const x=i+2,rf=rataFisik(h);
     R.push([i+1,h.nama,h.file,JAB[h.jab].label,
       {t:"n",v:r2(rf||0),f:`SUMIFS(Penilaian!$I:$I,Penilaian!$B:$B,C${x})/${nB}`},
       {t:"n",v:r2(h.rata),f:`SUMIFS(Penilaian!$${cAK}:$${cAK},Penilaian!$B:$B,C${x})/${nB}`},
       {t:"n",v:r2(((rf||0)+h.rata)/2),f:`(E${x}+F${x})/2`},
       {t:"s",v:rf===null?"Fisik belum lengkap":"Lengkap",f:`IF(COUNTIFS(Penilaian!$B:$B,C${x},Penilaian!$F:$F,"<>")+COUNTIFS(Penilaian!$B:$B,C${x},Penilaian!$G:$G,"<>")+COUNTIFS(Penilaian!$B:$B,C${x},Penilaian!$H:$H,"<>")<${nB*3},"Fisik belum lengkap","Lengkap")`},
-      h.catatan.join("; "),...(d=>d?[d.nama,d.nip,d.instansi,d.jabatanKini||"",d.jenis,d.tujuan]:["(tidak ada di daftar)","","","","",""])(pesertaDari(h))]);
+      h.catatan.join("; "),...(d=>d?[d.nama,d.nip,d.instansi,d.jabatanKini||"",d.tujuan,kategoriTujuan(d.tujuan),d.jenis]:["(tidak ada di daftar)","","","","","",""])(pesertaDari(h))]);
   });
   const K=[["No","KK","Indeks","Uraian Informasi Berkas","Unsur Uraian (penilaian Y)","Kurun","Jumlah","SKKA","Aktif","Inaktif","Nasib Akhir","Usul Pindah","Usul Musnah","Usul Serah"],
     ...KUNCI.map(k=>{const s=statusUsul(k,usulEksplisit(KUNCI));return[k.no,k.kk,k.indeks,k.uraian,k.unsur,k.kurun,k.jumlah,k.skka,k.aktif,k.inaktif,k.nasib,s.pindah?"Ya":"Tidak",s.musnah?"Ya":"Tidak",s.serah?"Ya":"Tidak"]})];
@@ -644,7 +644,7 @@ function unduh(){
   XLSX.utils.book_append_sheet(wb,ws3,"Kunci");XLSX.utils.book_append_sheet(wb,ws4,"Rules");
   if(gagal.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([["File","Masalah"],...gagal]),"Gagal");
   if(DAFTAR.length){const bm=DAFTAR.filter(d=>(d.jab===JAKTIF||!d.jab)&&!(d.file&&semua.some(h=>h.file===d.file)));
-    const ws5=XLSX.utils.aoa_to_sheet([["No","Nama","NIP","Instansi","Jabatan Saat Ini","Jenis Sertifikasi","Tujuan Jabatan"],...bm.map(d=>[d.no,d.nama,d.nip,d.instansi,d.jabatanKini||"",d.jenis,d.tujuan])]);ws5["!cols"]=[{wch:5},{wch:36},{wch:22},{wch:36},{wch:26},{wch:24}];
+    const ws5=XLSX.utils.aoa_to_sheet([["No","Nama","NIP","Instansi","Jabatan Saat Ini","Tujuan Sertifikasi","Kategori","Jenis Sertifikasi"],...bm.map(d=>[d.no,d.nama,d.nip,d.instansi,d.jabatanKini||"",d.tujuan,kategoriTujuan(d.tujuan),d.jenis])]);ws5["!cols"]=[{wch:5},{wch:36},{wch:22},{wch:36},{wch:26},{wch:24}];
     XLSX.utils.book_append_sheet(wb,ws5,"Belum Mengumpulkan")}
   XLSX.writeFile(wb,"Penilaian_Ujian_Praktik_"+JA.label.replace(/[^A-Za-z]+/g,"_")+".xlsx");
   toast("Excel "+JA.label+" diunduh");
