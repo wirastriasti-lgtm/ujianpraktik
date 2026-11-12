@@ -1562,6 +1562,7 @@ function vRekap(v,hasil){
     ${JENIS.length?`<div class="field"><label>Jenis sertifikasi</label><select id="fjn">${[["semua","Semua jenis"],...JENIS.map(j=>[j,j]),["—","Tidak ada di daftar"]].map(([k,l])=>`<option value="${esc(k)}" ${(UI.fjenis||"semua")===k?"selected":""}>${esc(l)}</option>`).join("")}</select></div>`:""}
     <div class="field"><label>Status</label><select id="flt">${[["semua","Semua peserta"],["fbelum","Fisik belum dinilai"],["fsudah","Fisik selesai"],["cek","Perlu dicek"]].map(([k,l])=>`<option value="${k}" ${UI.filter===k?"selected":""}>${l}</option>`).join("")}</select></div>
     <div class="field"><label>Urutkan</label><select id="srt">${OPS.some(o=>o[0]===cur)?"":`<option selected>Sesuai kolom yang diklik</option>`}${OPS.map(([k,l])=>`<option value="${k}" ${cur===k?"selected":""}>${l}</option>`).join("")}</select></div>
+    <button class="btn" id="dlKorR" title="Unduh semua koreksi nilai dan status cek (semua jabatan) ke Excel">Unduh hasil koreksi</button>
     ${!window.ONLINE||ONL.admin?`<button class="btn danger" id="rstR" title="Hapus semua peserta ${esc(JAB[JAKTIF].label)} beserta nilai fisik, koreksi, dan tanda cek">Hapus semua peserta</button>`:""}
   </div>
   <div class="tw"><table><thead><tr><th class="n">No</th>${thSort(R,"nama","Peserta")}${KUNCI.map((k,i)=>thSort(R,"b"+i,`DA ${k.no}<div class="sub">${esc(k.kk)}</div>`,"n")).join("")}${thSort(R,"da","Rata DA","n")}${thSort(R,"fisik","Fisik","n")}${thSort(R,"total","Total","n")}<th>Status</th></tr></thead><tbody>
@@ -1573,7 +1574,7 @@ function vRekap(v,hasil){
   <div class="sub" style="margin-top:10px">${rows.length} dari ${hasil.length} peserta · klik nama untuk melihat rincian</div></div>`;
   const fjn=$("fjn");if(fjn)fjn.onchange=e=>{UI.fjenis=e.target.value;render()};
   const qi=$("q");qi.oninput=()=>{UI.q=qi.value;const p=qi.selectionStart;render();const n=$("q");n.focus();n.setSelectionRange(p,p)};
-  $("flt").onchange=e=>{UI.filter=e.target.value;render()};$("srt").onchange=e=>{const[k,d]=e.target.value.split(":");if(d){UI.rs={k,d:+d};render()}};pasangSort(v,UI.rs);const rr=$("rstR");if(rr)rr.onclick=kosongkanJabatan;
+  $("flt").onchange=e=>{UI.filter=e.target.value;render()};$("srt").onchange=e=>{const[k,d]=e.target.value.split(":");if(d){UI.rs={k,d:+d};render()}};pasangSort(v,UI.rs);const rr=$("rstR");if(rr)rr.onclick=kosongkanJabatan;$("dlKorR").onclick=unduhKoreksi;
   v.querySelectorAll(".nm").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.k);UI.dq=h?h.nama:"";UI.donly=false;VIEW="detail";render();window.scrollTo({top:0})});
   v.querySelectorAll("[data-f]").forEach(el=>el.onclick=()=>{FSEL=el.dataset.f;VIEW="fisik";render();window.scrollTo({top:0})});
   v.querySelectorAll("[data-del]").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.del);if(h)hapusPesertaSatu(h)});
@@ -1590,6 +1591,7 @@ function vDetail(v,hasil,JA){
   v.innerHTML=`<div class="panel"><div class="toolbar">
     <div class="search">${ICON_SEARCH}<input id="dq" placeholder="Cari nama peserta…" value="${esc(UI.dq)}"></div>
     <div class="field"><label>Tampilkan</label><select id="donly">${[["semua","Semua berkas"],["perlu","Perlu dicek (belum)"],["sudah","Sudah dicek"],["kor","Dikoreksi penilai"]].map(([k,l])=>`<option value="${k}" ${String(UI.donly===true?"perlu":UI.donly===false?"semua":UI.donly)===k?"selected":""}>${l}</option>`).join("")}</select></div>
+    <button class="btn" id="dlKor" title="Unduh semua koreksi nilai dan status cek (semua jabatan) ke Excel">Unduh hasil koreksi</button>
     <button class="btn" id="hpsV" title="Hapus koreksi nilai dan tanda sudah dicek pada baris yang sedang tampil">Hapus koreksi &amp; tanda cek</button>
   </div>
   <div class="tw"><table class="dt"><thead><tr>${thSort(D,"nama","Peserta")}${thSort(D,"berkas","Berkas")}${JA.cols.map(c=>thSort(D,c,`${c}<div class="sub">${KOMP[c]}</div>`,"k")).join("")}${thSort(D,"da","Nilai DA","n")}<th>Uraian jawaban</th></tr></thead><tbody>
@@ -1601,6 +1603,7 @@ function vDetail(v,hasil,JA){
   const qi=$("dq");qi.oninput=()=>{UI.dq=qi.value;const p=qi.selectionStart;render();const n=$("dq");n.focus();n.setSelectionRange(p,p)};
   $("donly").onchange=e=>{UI.donly=e.target.value;render()};
   $("hpsV").onclick=()=>hapusVerifikasi(rows);
+  $("dlKor").onclick=unduhKoreksi;
   v.querySelectorAll("[data-undo]").forEach(el=>el.onclick=e=>{e.stopPropagation();const[i,c]=el.dataset.undo.split("|");const o=lim[+i],kr=o.b.kor[c];setKoreksi(o.h,o.b.no,c,null);render();toast(`Koreksi ${c} berkas ${o.b.no} dihapus · kembali ke ${fmt(kr.auto)}`)});
   v.querySelectorAll("[data-kor]").forEach(el=>el.onclick=()=>{const[i,c]=el.dataset.kor.split("|");const o=lim[+i];dialogKoreksi(o.h,o.b,c)});
   v.querySelectorAll("[data-cek]").forEach(el=>el.onclick=()=>{const o=lim[+el.dataset.cek];const on=!o.b.cek;setCek(o.h,o.b.no,on);render();toast(on?`${o.h.nama} berkas ${o.b.no} ditandai sudah dicek`:"Tanda dicek dihapus")});pasangSort(v,UI.ds);
@@ -1674,6 +1677,41 @@ function vCat(v,hasil){
 }
 
 /* ================= EXPORT EXCEL ================= */
+/* ================= EKSPOR HASIL KOREKSI (semua jabatan) ================= */
+function unduhKoreksi(){
+  const urut=Object.keys(JAB),orang=semua.slice().sort((a,b)=>urut.indexOf(a.jab)-urut.indexOf(b.jab)||a.nama.localeCompare(b.nama));
+  const nm=h=>{const d=typeof pesertaDari==="function"?pesertaDari(h):null;return d?d.nama:h.nama},nip=h=>{const d=typeof pesertaDari==="function"?pesertaDari(h):null;return d?d.nip||"":""};
+  const kunciTeks=(k,c)=>({X:k.kk,Y:k.uraian,Z:k.jumlah,AB:k.skka,AC:k.aktif,AD:k.inaktif,AE:k.nasib,AH:"usul pindah",AI:"usul musnah",AJ:"usul serah"})[c]||"";
+  const jawab=(b,c)=>JAWAB[c]?String(b.jaw[JAWAB[c]]??""):c==="Y"?String(b.jaw.uraian??""):"";
+  // nilai DA tanpa koreksi: hitung ulang tanpa data verifikasi peserta itu
+  const tanpaKoreksi=h=>{const k=fKey(h),simpan=VER[k];delete VER[k];const a=nilaiParsed(h.parsed,h.file,h.jab);if(simpan)VER[k]=simpan;return a};
+  const D=[["No","Nama Peserta","NIP","Jabatan","File","Berkas","KKA Kunci","Komponen","Kunci","Jawaban Peserta","Nilai Otomatis","Alasan Otomatis","Nilai Koreksi","Selisih","Alasan Koreksi","Dikoreksi Oleh","Waktu Koreksi"]];
+  const R=[["No","Nama Peserta","NIP","Jabatan","File","Jumlah Koreksi","Rata DA Otomatis","Rata DA Setelah Koreksi","Selisih","Berkas Perlu Dicek","Berkas Sudah Dicek","Sisa Belum Dicek","Nilai Fisik","Nilai Total (setelah koreksi)","Penilai"]];
+  const C=[["No","Nama Peserta","Jabatan","Berkas","KKA Kunci","Cara Dipadankan","Perlu Dicek","Sudah Dicek","Dicek Oleh","Waktu Cek"]];
+  let n=0,nr=0,nc=0;
+  orang.forEach(h=>{
+    const KJh=kunciJab(h.jab),kor=h.berkas.flatMap(b=>Object.entries(b.kor||{}).map(([c,o])=>({b,c,o}))),cekB=h.berkas.filter(cekBerkas),sudah=h.berkas.filter(b=>b.cek);
+    kor.forEach(({b,c,o})=>D.push([++n,nm(h),nip(h),JAB[h.jab].label,h.file,b.no,b.kkKunci,c+" "+KOMP[c],kunciTeks(KJh[b.no-1]||{},c),jawab(b,c),o.auto,o.autoD||"",o.v,Math.round((o.v-o.auto)*100)/100,o.alasan||"",o.oleh||"",o.t?fmtT(o.t):""]));
+    h.berkas.forEach(b=>{if(cekBerkas(b)||b.cek)C.push([++nc,nm(h),JAB[h.jab].label,b.no,b.kkKunci,b.cara,cekBerkas(b)?"Ya":"Tidak",b.cek?"Ya":"Belum",b.cek?b.cek.oleh:"",b.cek?fmtT(b.cek.t):""])});
+    if(!kor.length&&!sudah.length&&!cekB.length)return;
+    const auto=kor.length?tanpaKoreksi(h).rata:h.rata,rf=rataFisik(h),pen=[...new Set(kor.map(x=>x.o.oleh).concat(sudah.map(b=>b.cek.oleh)).filter(Boolean))].join(", ");
+    R.push([++nr,nm(h),nip(h),JAB[h.jab].label,h.file,kor.length,Math.round(auto*100)/100,Math.round(h.rata*100)/100,Math.round((h.rata-auto)*100)/100,cekB.length,sudah.length,cekB.filter(b=>!b.cek).length,rf===null?"belum":Math.round(rf*100)/100,rf===null?"":Math.round((rf+h.rata)/2*100)/100,pen]);
+  });
+  if(n===0&&nc===0){toast("Belum ada koreksi atau berkas yang perlu dicek");return}
+  const wb=XLSX.utils.book_new();
+  const lebar=(ws,w)=>{ws["!cols"]=w.map(x=>({wch:x}));ws["!autofilter"]={ref:ws["!ref"]};ws["!freeze"]={xSplit:2,ySplit:1}};
+  const w1=XLSX.utils.aoa_to_sheet(R);lebar(w1,[5,30,20,22,30,9,12,14,9,10,10,10,10,14,26]);XLSX.utils.book_append_sheet(wb,w1,"Ringkasan");
+  const w2=XLSX.utils.aoa_to_sheet(D);lebar(w2,[5,30,20,20,28,7,11,26,40,40,10,34,10,8,36,26,16]);XLSX.utils.book_append_sheet(wb,w2,"Detail Koreksi");
+  const w3=XLSX.utils.aoa_to_sheet(C);lebar(w3,[5,30,20,7,11,34,9,10,26,16]);XLSX.utils.book_append_sheet(wb,w3,"Status Cek");
+  const info=[["Hasil koreksi penilaian ujian praktik"],["Kunci",KUNCI_SRC],["Diunduh",new Date().toLocaleString("id-ID")],["Oleh",siapa()],[""],
+    ["Jumlah koreksi nilai",n],["Peserta dengan koreksi/cek",nr],["Berkas perlu dicek",C.slice(1).filter(r=>r[6]==="Ya").length],["Berkas sudah dicek",C.slice(1).filter(r=>r[7]==="Ya").length],[""],
+    ["Catatan","Nilai Otomatis = hasil hitung tool; Nilai Koreksi = nilai yang ditetapkan penilai. Rata DA Setelah Koreksi dipakai di rekap dan Excel penilaian."]];
+  const w4=XLSX.utils.aoa_to_sheet(info);w4["!cols"]=[{wch:28},{wch:70}];XLSX.utils.book_append_sheet(wb,w4,"Info");
+  const tgl=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,"Hasil_Koreksi_"+String(KUNCI_SRC.split(" · ")[0]||"Penilaian").replace(/[^A-Za-z0-9]+/g,"_")+"_"+tgl+".xlsx");
+  toast(`Hasil koreksi diunduh: ${n} koreksi nilai, ${nr} peserta`);
+}
+
 function unduh(){
   const JA=JAB[JAKTIF],C=JA.cols,hasil=pesertaAktif();
   if(!hasil.length){toast("Belum ada peserta di "+JA.label);return}
