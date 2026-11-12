@@ -77,16 +77,27 @@ const GELAR=/\b(s|a|d|m)\s*\.?\s*(kom|ap|ip|sos|e|h|pd|si|ak|ikom|i\.?kom|m|t|ps
 function normNama(n){return String(n||"").toLowerCase().replace(/,.*$/,"").replace(GELAR," ").replace(/[^a-z\s]/g," ").replace(/\s+/g," ").trim()}
 function tokNama(n){return normNama(n).split(" ").filter(w=>w&&!NOISE.has(w))}
 function tokFile(f){return String(f).replace(/\.[^.]+$/,"").toLowerCase().replace(/\(\d+\)/g," ").replace(/[^a-z\s]/g," ").split(/\s+/).filter(w=>w&&!NOISE.has(w))}
-function cocokTok(a,b){return a===b||(a.length>=4&&b.length>=4&&lev(a,b)<=1)||(a.length===1&&b.startsWith(a))||(b.length===1&&a.startsWith(b))||(a.length>=5&&b.length>=5&&(a.startsWith(b)||b.startsWith(a)))}
+// kecocokan satu kata nama (a = kata di nama peserta, b = kata di nama file):
+// 1 = sama / salah ketik 1 huruf (≥5 huruf) / awalan panjang; 0.5 = inisial di nama file ("M." untuk Muhammad); 0 = tidak
+function cocokTok(a,b){
+  if(a===b)return 1;
+  if(a.length===1)return b.startsWith(a)?1:0;                 // inisial di daftar ("Andi Jumiarti L")
+  if(b.length===1)return a.startsWith(b)?.5:0;                 // inisial di nama file → setengah
+  if(a.length>=5&&b.length>=5&&lev(a,b)<=1)return 1;
+  if(a.length>=5&&b.length>=5&&(a.startsWith(b)||b.startsWith(a)))return 1;
+  return 0;
+}
 // skor 0..1 = bagian nama peserta yang muncul di nama file / identitas di dalam file
 function skorPeserta(d,teksTok,digits){
   if(d.nip&&digits.includes(d.nip))return{s:1,dasar:"NIP"};
-  if(d.fileHint){const fh=tokFile(d.fileHint);if(fh.length&&fh.every(w=>teksTok.some(x=>cocokTok(w,x))))return{s:.99,dasar:"nama file di daftar"}}
+  if(d.fileHint){const fh=tokFile(d.fileHint);if(fh.length&&fh.every(w=>teksTok.some(x=>cocokTok(w,x)===1)))return{s:.99,dasar:"nama file di daftar"}}
   const N=tokNama(d.nama);if(!N.length)return{s:0};
-  const hit=N.filter(w=>teksTok.some(x=>cocokTok(w,x)));
-  const panjang=hit.filter(w=>w.length>1).length;
-  let s=hit.length/N.length;if(!panjang)s=0;           // harus ada minimal satu kata nama yang utuh
-  return{s,dasar:"nama"};
+  // nama satu kata (mis. "Weni", "Martini") harus sama persis
+  if(N.length===1)return teksTok.includes(N[0])?{s:.9,dasar:"nama (satu kata)"}:{s:0};
+  const nilai=N.map(w=>Math.max(0,...teksTok.map(x=>cocokTok(w,x))));
+  const utuh=nilai.filter((v,i)=>v===1&&N[i].length>1).length;
+  if(!utuh)return{s:0};                                       // minimal satu kata nama utuh
+  return{s:nilai.reduce((a,b)=>a+b,0)/N.length,dasar:"nama"};
 }
 function cocokkanFile(nama,p){
   const teks=nama+" "+(p.identitas?Object.values(p.identitas).join(" "):"");
@@ -94,7 +105,9 @@ function cocokkanFile(nama,p){
   const kand=DAFTAR.map(d=>({d,...skorPeserta(d,T,digits)})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s||tokNama(b.d.nama).length-tokNama(a.d.nama).length);
   const top=kand[0],dua=kand[1];
   if(!top||top.s<.6)return{d:null,kand:kand.slice(0,5),status:"tidak cocok"};
-  if(dua&&dua.s>=top.s-.05&&dua.d!==top.d)return{d:null,kand:kand.slice(0,5),status:"ragu"};
+  // dua nama sama kuat: pilih yang lebih spesifik bila semua katanya ada (mis. "Muhammad Luthfi Al Hadad" vs "Muhammad Luthfi")
+  const lebihSpesifik=dua&&top.s>=.99&&dua.s>=.99&&tokNama(top.d.nama).length>tokNama(dua.d.nama).length;
+  if(dua&&dua.s>=top.s-.05&&dua.d!==top.d&&!lebihSpesifik)return{d:null,kand:kand.slice(0,5),status:"ragu"};
   return{d:top.d,s:top.s,dasar:top.dasar,kand:kand.slice(0,5),status:top.s>=.99?"pasti":"cocok"};
 }
 // identitas yang tertulis di file jawaban (mis. "Nama : …", "NIP : …" di baris atas sheet)

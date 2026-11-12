@@ -103,7 +103,10 @@ async function muat(list){
   for(let i=0;i<files.length;i++){const f=files[i];
     try{const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});
       if(wb.SheetNames.some(n=>/^MasterPraktik/i.test(n))){gagal.push([f.name,"File master/kunci, dilewati. Pakai tombol Upload kunci jawaban."]);skip++;continue}
-      const p=parseWb(wb);p.identitas=bacaIdentitas(wb);baca.push({f,p,t:tebakJabatan(f.name,p)});
+      const p=parseWb(wb);
+      // bukan file jawaban ujian praktik (tidak ada sheet DAFTAR BERKAS dengan kolom kode klasifikasi) → dilewati
+      if(!p.db.length&&p.catatan.some(c=>/DAFTAR BERKAS tidak ditemukan/.test(c))){gagal.push([f.name,"Bukan file jawaban ujian praktik (tidak ada sheet DAFTAR BERKAS dengan kolom Kode Klasifikasi) — dilewati"]);skip++;continue}
+      p.identitas=bacaIdentitas(wb);baca.push({f,p,t:tebakJabatan(f.name,p)});
     }catch(e){gagal.push([f.name,e.message]);skip++}
     if(bar){bar.style.width=(100*(i+1)/files.length)+"%";lbl.textContent=`Membaca ${i+1} dari ${files.length} file…`}
     if(i%5===4)await new Promise(r=>setTimeout(r,0));
