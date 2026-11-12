@@ -25,7 +25,7 @@ const esc=x=>String(x??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 const $=id=>document.getElementById(id);
 const pesertaAktif=()=>semua.filter(h=>h.jab===JAKTIF);
 const CEK_COLS=["Y","AC","AD","AE","AH","AI","AJ"];
-// berkas yang sebaiknya diverifikasi penilai: ada nilai di antara 20–100 (otomatis) atau berkas dipadankan lewat uraian
+// berkas yang sebaiknya dicek verifikator: ada nilai di antara 20–100 (otomatis) atau berkas dipadankan lewat uraian
 function cekBerkas(b){return CEK_COLS.some(c=>{const v=b.kor&&b.kor[c]?b.kor[c].auto:b.S[c];return v!==null&&v!==undefined&&v>20&&v<100})||b.cara!=="kode sama"}
 const sisaCek=b=>cekBerkas(b)&&!b.cek;
 function perluCek(h){return h.berkas.some(sisaCek)||(h.catatan.length>0&&!h.berkas.every(b=>b.cek))}
@@ -381,16 +381,16 @@ async function muatKunci(f){
 function nilaiUlang(){semua=semua.map(h=>nilaiParsed(h.parsed,h.file,h.jab))}
 
 /* ================= RENDER ================= */
-const VIEWS=[["muat","Muat data"],["daftar","Daftar peserta"],["rekap","Rekap peserta"],["fisik","Penilaian fisik"],["detail","Rincian per berkas"],["kunci","Kunci & rules"],["cat","Catatan"]].concat(window.ONLINE?[["tim","Tim penilai"]]:[]);
+const VIEWS=[["muat","Muat data"],["daftar","Daftar peserta"],["rekap","Rekap peserta"],["fisik","Penilaian fisik"],["detail","Rincian per berkas"],["kunci","Kunci & rules"],["cat","Catatan"]].concat(window.ONLINE?[["tim","Tim verifikator"]]:[]);
 const HEAD={
   muat:["Muat jawaban <em>peserta</em>.","Pilih jabatan di menu atas, pastikan kunci jawaban sudah sesuai angkatan, lalu muat folder berisi file Excel jawaban peserta. Semua diproses di laptop ini — tanpa internet, tanpa unggah ke mana pun."],
-  rekap:["Rekap nilai peserta, <em>per jabatan</em>.","Nilai daftar arsip dihitung otomatis terhadap kunci; nilai fisik berkas diisi penilai. Nilai total muncul setelah penilaian fisik ditandai selesai."],
+  rekap:["Rekap nilai <em>peserta</em>.","Nilai daftar arsip dihitung otomatis; nilai fisik diisi verifikator. Setelah berkas dicek dan nilai fisik lengkap, klik <b>Verifikasi</b> di baris peserta — nama verifikator tercatat di sini dan di Excel."],
   fisik:["Penilaian fisik <em>berkas</em>.","Semua bagian bawaan benar. Cocokkan folder di tangan dengan kunci di tiap kartu, klik hanya yang salah, lalu tekan Enter untuk lanjut ke peserta berikutnya."],
-  detail:["Rincian nilai <em>per berkas</em>.","Setiap nilai disertai alasan dan jawaban asli peserta. Arahkan kursor ke nilai lalu klik ✎ untuk mengoreksi, dan tandai berkas yang sudah diverifikasi supaya daftar “perlu dicek” berkurang."],
+  detail:["Rincian nilai <em>per berkas</em>.","Setiap nilai disertai alasan dan jawaban asli peserta. Tiga langkah: <b>cek</b> berkasnya (tandai sudah dicek), <b>koreksi</b> nilainya bila perlu (klik ✎ di nilai), lalu <b>verifikasi</b> pesertanya di menu Rekap."],
   kunci:["Kunci jawaban & <em>rules</em>.","Kunci dibaca dari file master angkatan. Unsur uraian menentukan seberapa ketat penilaian uraian informasi — sesuaikan bila angkatan berganti."],
   cat:["Catatan & <em>masalah file</em>.","File yang gagal dibaca, sheet yang tidak ditemukan, atau berkas yang tidak bisa dicocokkan dengan kunci."],
   daftar:["Daftar <em>peserta</em>.","Upload daftar resmi peserta (nama, jenis sertifikasi, tujuan jabatan). File jawaban otomatis dicocokkan ke daftar ini dan dinilai sesuai tujuan jabatannya, dan peserta yang belum mengumpulkan langsung terlihat."],
-  tim:["Tim <em>penilai</em>.","Hanya email yang terdaftar di sini yang bisa membuka data penilaian. Admin bisa menambah atau menghapus penilai."]
+  tim:["Tim <em>verifikator</em>.","Hanya akun yang terdaftar di sini yang bisa membuka data penilaian. Verifikator mengecek berkas, mengoreksi nilai, menilai fisik, dan memverifikasi peserta; admin juga mengelola akun, kunci, dan daftar peserta."]
 };
 function render(){
   sinkronJabatan();const hasil=pesertaAktif(),JA=JAB[JAKTIF];
@@ -409,23 +409,35 @@ function render(){
 
   const [title,lead]=HEAD[VIEW];
   const da=hasil.length?hasil.reduce((a,h)=>a+h.rata,0)/hasil.length:null;
-  const compact=["fisik","detail","kunci","cat","tim","daftar"].includes(VIEW);
-  let out=`<div class="eyebrow">Ujian praktik sertifikasi · ${esc(JA.label)}</div><h1 class="${compact?"sm":""}">${title}</h1><p class="lead ${compact?"sm":""}">${lead}</p>
+  const ringkas=VIEW==="rekap"||VIEW==="detail",compact=ringkas||["fisik","kunci","cat","tim","daftar"].includes(VIEW);
+  const tombolMuat=`<button class="btn sm" data-act="folder"><span class="plus">+</span> Muat folder</button><button class="btn sm" data-act="files"><span class="plus">+</span> Muat file</button>`;
+  let out=ringkas?`<div class="hrow"><div><div class="eyebrow">Ujian praktik sertifikasi · ${esc(JA.label)}</div><h1 class="sm">${title}</h1></div><div class="hact">${tombolMuat}</div></div><p class="lead xs">${lead}</p>${stripProgres(hasil,JA,da)}`
+  :`<div class="eyebrow">Ujian praktik sertifikasi · ${esc(JA.label)}</div><h1 class="${compact?"sm":""}">${title}</h1><p class="lead ${compact?"sm":""}">${lead}</p>
   ${compact?"":`<div class="actions"><button class="btn" data-act="folder"><span class="plus">+</span> Muat folder jawaban</button><button class="btn" data-act="files"><span class="plus">+</span> Muat file</button><button class="btn" data-act="kunci"><span class="plus">+</span> Upload kunci jawaban</button></div>
-  <div class="rule"></div>`}
-  ${VIEW==="fisik"||VIEW==="kunci"||VIEW==="cat"||VIEW==="tim"||VIEW==="daftar"?"":`<div class="kpis">
-    <div class="kpi"><div class="kl"><span class="sq" style="background:var(--navy)"></span>Peserta dimuat</div><div class="kv">${hasil.length}</div><div class="ks">${esc(JA.label)} · DA ÷ ${JA.div}</div></div>
-    <div class="kpi"><div class="kl"><span class="sq" style="background:var(--green)"></span>Rata-rata daftar arsip</div><div class="kv">${fmt(da)}</div><div class="ks">dinilai otomatis</div></div>
-    <div class="kpi"><div class="kl"><span class="sq" style="background:var(--gold)"></span>Fisik selesai</div><div class="kv">${nFis}</div><div class="ks">${hasil.length?Math.round(100*nFis/hasil.length):0}% dari peserta</div></div>
-    <div class="kpi"><div class="kl"><span class="sq" style="background:var(--red)"></span>Perlu dicek</div><div class="kv">${nCek}</div><div class="ks">${(()=>{const all=hasil.flatMap(h=>h.berkas.filter(cekBerkas)),d=all.filter(b=>b.cek).length;return all.length?`${d} dari ${all.length} berkas sudah dicek`:"tidak ada nilai di antara 20–100"})()}</div></div>
-  </div>`}`;
+  <div class="rule"></div>${stripProgres(hasil,JA,da)}`}`;
   out+=`<div id="view"></div>`;
   $("main").innerHTML=out;
+  $("main").querySelectorAll("[data-pf]").forEach(b=>b.onclick=()=>{const[vw,f]=b.dataset.pf.split(":");VIEW=vw;if(vw==="rekap")UI.filter=f;else if(vw==="detail")UI.donly=f;render()});
   $("main").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>({folder:()=>$("fDir").click(),files:()=>$("fFiles").click(),kunci:()=>$("fKunci").click()})[b.dataset.act]());
   const v=$("view");
   ({muat:vMuat,daftar:vDaftar,rekap:vRekap,fisik:vFisik,detail:vDetail,kunci:vKunci,cat:vCat,tim:(v)=>ONL.vTim(v)})[VIEW](v,hasil,JA);
 }
 
+// Strip progres: alur unggah → cek berkas → nilai fisik → verifikasi (jabatan aktif; baris kecil = semua jabatan). Klik = filter.
+function stripProgres(hasil,JA,da){
+  const N=hasil.length,dft=DAFTAR.filter(d=>d.jab===JAKTIF).length,target=dft||N;
+  const cekAll=hasil.flatMap(h=>h.berkas.filter(cekBerkas)),cekD=cekAll.filter(b=>b.cek).length;
+  const nF=hasil.filter(h=>rataFisik(h)!==null).length,nV=hasil.filter(verFinal).length;
+  const S=semua,sF=S.filter(h=>rataFisik(h)!==null).length,sV=S.filter(verFinal).length,sT=DAFTAR.length||S.length;
+  const sCek=S.flatMap(h=>h.berkas.filter(cekBerkas)),sCekD=sCek.filter(b=>b.cek).length;
+  const langkah=[
+    ["File masuk",N,target,dft?`dari ${dft} di daftar`:"file jawaban",`${S.length}/${sT}`,"rekap:semua","var(--navy)"],
+    ["Berkas dicek",cekD,cekAll.length,cekAll.length?`dari ${cekAll.length} yang perlu dicek`:"tidak ada yang perlu dicek",`${sCekD}/${sCek.length}`,"detail:perlu","var(--amber)"],
+    ["Fisik dinilai",nF,N,`dari ${N} peserta`,`${sF}/${S.length}`,"rekap:fbelum","var(--gold)"],
+    ["Terverifikasi",nV,N,`dari ${N} peserta`,`${sV}/${S.length}`,"rekap:vbelum2","var(--green)"]];
+  return`<div class="pstrip">${langkah.map(([l,a,b,ks,all,pf,warna],i)=>{const pc=b?Math.min(100,Math.round(100*a/b)):(i===1?100:0);
+    return`<button class="pst" data-pf="${pf}" title="Klik untuk menampilkan yang belum"><span class="pl"><span class="pn">${i+1}</span>${l}</span><span class="pv">${a}<small>/${b}</small></span><span class="pbar"><i style="width:${pc}%;background:${warna}"></i></span><span class="pk">${ks} · semua jabatan ${all}</span></button>`}).join("")}
+    <div class="pst info"><span class="pl">Rata-rata DA</span><span class="pv">${fmt(da)}</span><span class="pk">${esc(JA.label)} · DA ÷ ${JA.div}</span></div></div>`}
 function emptyState(v){
   v.innerHTML=`<div class="panel"><div class="empty"><h3>Belum ada peserta di ${esc(JAB[JAKTIF].label)}</h3><div>Muat folder jawaban peserta untuk mulai menilai.</div>
   <div style="margin-top:16px"><button class="btn pri" onclick="document.getElementById('fDir').click()"><span class="plus">+</span> Muat folder jawaban</button></div></div></div>`;
@@ -447,6 +459,13 @@ function vMuat(v,hasil,JA){
 }
 
 const ICON_SEARCH=`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>`;
+function menuBaris(anchor,items){document.querySelectorAll(".rmenu").forEach(x=>x.remove());
+  const m=document.createElement("div");m.className="rmenu";m.setAttribute("role","menu");
+  m.innerHTML=items.map(([l,,c],i)=>`${c==="danger"?'<div class="rsep"></div>':""}<button role="menuitem" class="${c||""}" data-i="${i}">${esc(l)}</button>`).join("");
+  document.body.appendChild(m);const r=anchor.getBoundingClientRect();m.style.top=(window.scrollY+r.bottom+4)+"px";m.style.left=Math.max(8,window.scrollX+r.right-m.offsetWidth)+"px";
+  const tutup=()=>{m.remove();document.removeEventListener("click",tutup);document.removeEventListener("keydown",kd)},kd=e=>{if(e.key==="Escape")tutup()};
+  m.querySelectorAll("button").forEach(b=>b.onclick=e=>{e.stopPropagation();tutup();items[+b.dataset.i][1]()});
+  setTimeout(()=>{document.addEventListener("click",tutup);document.addEventListener("keydown",kd)},0);const f=m.querySelector("button");if(f)f.focus()}
 const nVersi=h=>((h.parsed||{}).versiLain||[]).length;
 function vRekap(v,hasil){
   if(!hasil.length)return emptyState(v);
@@ -465,21 +484,22 @@ function vRekap(v,hasil){
     <div class="field"><label>Status</label><select id="flt">${[["semua","Semua peserta"],["fbelum","Fisik belum dinilai"],["fsudah","Fisik selesai"],["cek","Perlu dicek"],["vbelum2","Belum diverifikasi"],["vsudah","Sudah diverifikasi"],["versi","Punya beberapa versi file"],["vbelum","Versi belum dipilih verifikator"]].map(([k,l])=>`<option value="${k}" ${UI.filter===k?"selected":""}>${l}</option>`).join("")}</select></div>
     <div class="field"><label>Urutkan</label><select id="srt">${OPS.some(o=>o[0]===cur)?"":`<option selected>Sesuai kolom yang diklik</option>`}${OPS.map(([k,l])=>`<option value="${k}" ${cur===k?"selected":""}>${l}</option>`).join("")}</select></div>
     <button class="btn" id="dlKorR" title="Unduh semua koreksi nilai dan status cek (semua jabatan) ke Excel">Unduh hasil koreksi</button>
-    ${!window.ONLINE||ONL.admin?`<button class="btn danger" id="rstR" title="Hapus semua peserta ${esc(JAB[JAKTIF].label)} beserta nilai fisik, koreksi, dan tanda cek">Hapus semua peserta</button>`:""}
   </div>
-  <div class="tw"><table><thead><tr><th class="n">No</th>${thSort(R,"nama","Peserta")}${KUNCI.map((k,i)=>thSort(R,"b"+i,`DA ${k.no}<div class="sub">${esc(k.kk)}</div>`,"n")).join("")}${thSort(R,"da","Rata DA","n")}${thSort(R,"fisik","Fisik","n")}${thSort(R,"total","Total","n")}<th>Status</th></tr></thead><tbody>
-  ${rows.map((o,i)=>`<tr><td class="n sub">${i+1}</td><td><span class="nm" data-k="${esc(fKey(o.h))}">${esc(o.d?o.d.nama:o.h.nama)}</span>${!window.ONLINE||ONL.admin?`<button class="hpb" data-del="${esc(fKey(o.h))}" title="Hapus peserta ini (mis. salah upload)">Hapus</button>`:""}${nVersi(o.h)?` <button class="pill ${o.h.parsed.adaBaru?"warn":o.h.parsed.dipilih?"ok":"bad"} pbtn" data-ver="${esc(fKey(o.h))}" title="Ada beberapa versi file — klik untuk membandingkan dan memilih">${nVersi(o.h)+1} versi${o.h.parsed.adaBaru?" · ada baru":o.h.parsed.dipilih?" · ditetapkan":" · belum dipilih"}</button>`:""}${o.d?`<div class="sub">${esc([o.d.jenis,o.d.instansi].filter(Boolean).join(" · "))}${o.d.nama!==o.h.nama?` · file: ${esc(o.h.file)}`:""}</div>`:DAFTAR.length?`<div class="sub" style="color:var(--amber)">tidak ada di daftar peserta</div>`:""}${o.h.catatan.length?`<div class="sub" style="color:var(--red)">${esc(o.h.catatan[0])}${o.h.catatan.length>1?` (+${o.h.catatan.length-1})`:""}</div>`:""}</td>
+  <div class="tw"><table><thead><tr><th class="n">No</th>${thSort(R,"nama","Peserta")}${KUNCI.map((k,i)=>thSort(R,"b"+i,`DA ${k.no}<div class="sub">${esc(k.kk)}</div>`,"n")).join("")}${thSort(R,"da","Rata DA","n")}${thSort(R,"fisik","Fisik","n")}${thSort(R,"total","Total","n")}<th>Status</th><th></th></tr></thead><tbody>
+  ${rows.map((o,i)=>`<tr><td class="n sub">${i+1}</td><td><span class="nm" data-k="${esc(fKey(o.h))}">${esc(o.d?o.d.nama:o.h.nama)}</span>${nVersi(o.h)?` <button class="pill ${o.h.parsed.adaBaru?"warn":o.h.parsed.dipilih?"ok":"bad"} pbtn" data-ver="${esc(fKey(o.h))}" title="Ada beberapa versi file — klik untuk membandingkan dan memilih">${nVersi(o.h)+1} versi${o.h.parsed.adaBaru?" · ada baru":o.h.parsed.dipilih?" · ditetapkan":" · belum dipilih"}</button>`:""}${o.d?`<div class="sub">${esc([o.d.jenis,o.d.instansi].filter(Boolean).join(" · "))}${o.d.nama!==o.h.nama?` · file: ${esc(o.h.file)}`:""}</div>`:DAFTAR.length?`<div class="sub" style="color:var(--amber)">tidak ada di daftar peserta</div>`:""}${o.h.catatan.length?`<div class="sub" style="color:var(--red)">${esc(o.h.catatan[0])}${o.h.catatan.length>1?` (+${o.h.catatan.length-1})`:""}</div>`:""}</td>
     ${o.h.berkas.map(b=>`<td class="n"><span class="sc ${cls(b.da)}">${fmt(b.da)}</span></td>`).join("")}
     <td class="n big">${fmt(o.h.rata)}</td><td class="n">${o.rf===null?`<button class="btn sm ghost" data-f="${esc(fKey(o.h))}">Nilai fisik</button>`:fmt(o.rf)}</td><td class="n big">${fmt(o.tot)}</td>
-    <td>${o.rf===null?'<span class="pill no">Fisik belum</span>':'<span class="pill ok">Lengkap</span>'} ${perluCek(o.h)?'<span class="pill warn">Perlu dicek</span>':""}${(f=>f?` <button class="pill ok pbtn" data-fin="${esc(fKey(o.h))}" title="Diverifikasi ${esc(fmtT(f.t))} — klik untuk membatalkan">✓ Diverifikasi ${esc(namaOrang(f.oleh))}</button>`:` <button class="btn sm ghost" data-fin="${esc(fKey(o.h))}" title="Tandai nilai peserta ini sudah diverifikasi">Verifikasi</button>`)(verFinal(o.h))}</td></tr>`).join("")}
+    <td>${o.rf===null?'<span class="pill no">Fisik belum</span>':'<span class="pill ok">Lengkap</span>'} ${perluCek(o.h)?'<span class="pill warn">Perlu dicek</span>':""}${(f=>f?` <button class="pill ok pbtn" data-fin="${esc(fKey(o.h))}" title="Diverifikasi ${esc(fmtT(f.t))} — klik untuk membatalkan">✓ Diverifikasi ${esc(namaOrang(f.oleh))}</button>`:` <button class="btn sm ghost" data-fin="${esc(fKey(o.h))}" title="Tandai nilai peserta ini sudah diverifikasi">Verifikasi</button>`)(verFinal(o.h))}</td><td class="n"><button class="rowm" data-menu="${esc(fKey(o.h))}" title="Tindakan lain" aria-label="Tindakan lain untuk ${esc(o.h.nama)}">⋯</button></td></tr>`).join("")}
   </tbody></table>${rows.length?"":`<div class="empty">Tidak ada peserta yang cocok dengan filter.</div>`}</div>
-  <div class="sub" style="margin-top:10px">${rows.length} dari ${hasil.length} peserta · klik nama untuk melihat rincian</div></div>`;
+  <div class="pfoot"><span class="sub">${rows.length} dari ${hasil.length} peserta · klik nama untuk melihat rincian</span>${!window.ONLINE||ONL.admin?`<button class="lnk danger" id="rstR" title="Hapus semua peserta ${esc(JAB[JAKTIF].label)} beserta nilai fisik, koreksi, dan tanda cek">Hapus semua peserta ${esc(JAB[JAKTIF].label)}…</button>`:""}</div></div>`;
   const fjn=$("fjn");if(fjn)fjn.onchange=e=>{UI.fjenis=e.target.value;render()};
   const qi=$("q");qi.oninput=()=>{UI.q=qi.value;const p=qi.selectionStart;render();const n=$("q");n.focus();n.setSelectionRange(p,p)};
   $("flt").onchange=e=>{UI.filter=e.target.value;render()};$("srt").onchange=e=>{const[k,d]=e.target.value.split(":");if(d){UI.rs={k,d:+d};render()}};pasangSort(v,UI.rs);const rr=$("rstR");if(rr)rr.onclick=kosongkanJabatan;$("dlKorR").onclick=unduhKoreksi;
   v.querySelectorAll(".nm").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.k);UI.dq=h?h.nama:"";UI.donly=false;VIEW="detail";render();window.scrollTo({top:0})});
   v.querySelectorAll("[data-f]").forEach(el=>el.onclick=()=>{FSEL=el.dataset.f;VIEW="fisik";render();window.scrollTo({top:0})});
-  v.querySelectorAll("[data-del]").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.del);if(h)hapusPesertaSatu(h)});
+  v.querySelectorAll("[data-menu]").forEach(el=>el.onclick=e=>{e.stopPropagation();const h=hasil.find(x=>fKey(x)===el.dataset.menu);if(!h)return;
+    menuBaris(el,[["Lihat rincian berkas",()=>{UI.dq=h.nama;UI.donly=false;VIEW="detail";render();window.scrollTo({top:0})}],["Nilai fisik",()=>{FSEL=fKey(h);VIEW="fisik";render();window.scrollTo({top:0})}],
+      ...(nVersi(h)?[["Bandingkan versi file",()=>dialogVersi(h)]]:[]),...(!window.ONLINE||ONL.admin?[["Hapus peserta…",()=>hapusPesertaSatu(h),"danger"]]:[])])});
   v.querySelectorAll("[data-ver]").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.ver);if(h)dialogVersi(h)});
   v.querySelectorAll("[data-fin]").forEach(el=>el.onclick=()=>{const h=hasil.find(x=>fKey(x)===el.dataset.fin);if(h)tombolFinal(h)});
 }
@@ -494,16 +514,15 @@ function vDetail(v,hasil,JA){
   const lim=rows.slice(0,400);
   v.innerHTML=`<div class="panel"><div class="toolbar">
     <div class="search">${ICON_SEARCH}<input id="dq" placeholder="Cari nama peserta…" value="${esc(UI.dq)}"></div>
-    <div class="field"><label>Tampilkan</label><select id="donly">${[["semua","Semua berkas"],["perlu","Perlu dicek (belum)"],["sudah","Sudah dicek"],["kor","Dikoreksi penilai"]].map(([k,l])=>`<option value="${k}" ${String(UI.donly===true?"perlu":UI.donly===false?"semua":UI.donly)===k?"selected":""}>${l}</option>`).join("")}</select></div>
+    <div class="field"><label>Tampilkan</label><select id="donly">${[["semua","Semua berkas"],["perlu","Perlu dicek (belum)"],["sudah","Sudah dicek"],["kor","Nilai dikoreksi"]].map(([k,l])=>`<option value="${k}" ${String(UI.donly===true?"perlu":UI.donly===false?"semua":UI.donly)===k?"selected":""}>${l}</option>`).join("")}</select></div>
     <button class="btn" id="dlKor" title="Unduh semua koreksi nilai dan status cek (semua jabatan) ke Excel">Unduh hasil koreksi</button>
-    <button class="btn" id="hpsV" title="Hapus koreksi nilai dan tanda sudah dicek pada baris yang sedang tampil">Hapus koreksi &amp; tanda cek</button>
   </div>
   <div class="tw"><table class="dt"><thead><tr>${thSort(D,"nama","Peserta")}${thSort(D,"berkas","Berkas")}${JA.cols.map(c=>thSort(D,c,`${c}<div class="sub">${KOMP[c]}</div>`,"k")).join("")}${thSort(D,"da","Nilai DA","n")}<th>Uraian jawaban</th></tr></thead><tbody>
   ${lim.map(({h,b},i)=>{const baru=urutNilai||i===0||lim[i-1].h!==h;return`<tr class="${baru&&i&&!urutNilai?"grp":""}"><td>${baru?`<b>${esc(h.nama)}</b>`:`<span class="sub">${esc(h.nama)}</span>`}</td><td><b>${b.no} · ${esc(b.kkKunci)}</b><div class="sub">${esc(b.jaw.kk||"–")} · ${esc(b.cara)}</div>${b.cek?`<button class="cekb on" data-cek="${i}" title="Dicek ${esc(b.cek.oleh)} · ${esc(fmtT(b.cek.t))} — klik untuk membatalkan">✓ Sudah dicek</button>`:`<button class="cekb ${cekBerkas(b)?"perlu":""}" data-cek="${i}">${cekBerkas(b)?"Tandai sudah dicek":"Tandai dicek"}</button>`}</td>
     ${JA.cols.map(c=>{const v=b.S[c],jw=JAWAB[c]?String(b.jaw[JAWAB[c]]||""):"";const kr=b.kor&&b.kor[c];return`<td class="cell ${kr?"kor":v!==null&&v<=20?"low":v!==null&&v<100?"mid":""}"><span class="sc ${cls(v)}">${fmt(v)}</span>${kr?`<span class="korb" title="Otomatis ${fmt(kr.auto)} · dikoreksi ${esc(kr.oleh||"")} ${esc(fmtT(kr.t))}">dikoreksi · ${fmt(kr.auto)}→${fmt(v)}<button class="korx" data-undo="${i}|${c}" title="Hapus koreksi, kembali ke ${fmt(kr.auto)}">✕</button></span>`:""}<button class="edb" data-kor="${i}|${c}" title="Koreksi nilai">✎</button><div class="why">${esc(b.D[c])}</div>${jw?`<div class="ans" title="${esc(jw)}">“${esc(jw)}”</div>`:""}</td>`}).join("")}
     <td class="n big">${fmt(b.da)}</td><td class="ura">${esc(b.jaw.uraian)}${b.kurang&&b.kurang.length?`<div class="why" style="max-width:none">kurang: ${esc(b.kurang.join(", "))}</div>`:""}</td></tr>`}).join("")}
   </tbody></table>${rows.length?"":`<div class="empty">Tidak ada berkas yang cocok.</div>`}</div>
-  <div class="sub" style="margin-top:10px">${rows.length} baris${rows.length>400?" · menampilkan 400 pertama, persempit dengan pencarian":""}</div></div>`;
+  <div class="pfoot"><span class="sub">${rows.length} baris${rows.length>400?" · menampilkan 400 pertama, persempit dengan pencarian":""}</span><button class="lnk danger" id="hpsV" title="Hapus koreksi nilai dan tanda sudah dicek pada baris yang sedang tampil">Hapus koreksi &amp; tanda cek di baris yang tampil…</button></div></div>`;
   const qi=$("dq");qi.oninput=()=>{UI.dq=qi.value;const p=qi.selectionStart;render();const n=$("dq");n.focus();n.setSelectionRange(p,p)};
   $("donly").onchange=e=>{UI.donly=e.target.value;render()};
   $("hpsV").onclick=()=>hapusVerifikasi(rows);

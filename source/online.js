@@ -33,7 +33,7 @@ const ONL={
     document.querySelector(".wrap").style.display="none";document.getElementById("dl").style.display="none";document.getElementById("jnav").style.visibility="hidden";
     let el=document.getElementById("login");if(!el){el=document.createElement("div");el.id="login";document.body.appendChild(el)}
     const judul={masuk:"Masuk untuk <em>menilai</em>.",daftar:"Buat akun <em>penilai</em>.",lupa:"Atur ulang <em>password</em>.",baru:"Password <em>baru</em>.",tolak:"Akses <em>belum dibuka</em>."}[mode];
-    const lead={masuk:"Masuk dengan nama pengguna dan password dari admin (atau email, bila akunmu memakai email).",daftar:"Pakai email yang sudah didaftarkan admin. Setelah daftar, buka email konfirmasi dari Supabase, lalu kembali ke sini untuk masuk.",lupa:"Akun dengan nama pengguna: minta admin mengatur ulang password di menu Tim penilai. Akun dengan email: kami kirim tautan atur ulang ke email kamu.",baru:"Ketik password baru untuk akun ini.",tolak:""}[mode];
+    const lead={masuk:"Masuk dengan nama pengguna dan password dari admin (atau email, bila akunmu memakai email).",daftar:"Pakai email yang sudah didaftarkan admin. Setelah daftar, buka email konfirmasi dari Supabase, lalu kembali ke sini untuk masuk.",lupa:"Akun dengan nama pengguna: minta admin mengatur ulang password di menu Tim verifikator. Akun dengan email: kami kirim tautan atur ulang ke email kamu.",baru:"Ketik password baru untuk akun ini.",tolak:""}[mode];
     el.innerHTML=`<div class="lbox"><div class="eyebrow">Ujian praktik sertifikasi</div><h1 class="sm">${judul}</h1><p class="lead sm">${pesan||lead}</p>
       ${mode==="tolak"?`<button class="btn" id="lOut">Keluar</button>`:`<form id="lf">
       ${mode!=="baru"?`<label>${mode==="masuk"?"Nama pengguna atau email":"Email"}<input type="${mode==="masuk"?"text":"email"}" id="lE" required autocomplete="username" autocapitalize="none" spellcheck="false"></label>`:""}
@@ -61,7 +61,7 @@ const ONL={
   async setelahLogin(session){
     this.email=String(session.user.email||"").toLowerCase();
     const{data:me,error}=await this.sb.from("penilai").select("*").eq("email",this.email).maybeSingle();
-    if(error||!me)return this.layarLogin("tolak",`Akun <b>${esc(namaAkun(this.email))}</b> belum terdaftar sebagai penilai. Minta admin menambahkannya di menu Tim penilai, lalu muat ulang halaman ini.`);
+    if(error||!me)return this.layarLogin("tolak",`Akun <b>${esc(namaAkun(this.email))}</b> belum terdaftar sebagai verifikator. Minta admin menambahkannya di menu Tim verifikator, lalu muat ulang halaman ini.`);
     this.nama=me.nama||namaAkun(this.email);this.admin=me.peran==="admin";
     const tm=await this.sb.from("penilai").select("email,nama");this.timMap={};(tm.data||[]).forEach(p=>{if(p.nama){this.timMap[p.email]=p.nama;this.timMap[namaAkun(p.email)]=p.nama}});
     const l=document.getElementById("login");if(l)l.remove();
@@ -76,7 +76,7 @@ const ONL={
   pasangHeader(){
     const t=document.querySelector(".tright");if(document.getElementById("uchip"))return;
     const d=document.createElement("div");d.id="uchip";d.className="uchip";
-    d.innerHTML=`<span class="sdot" id="sdot" title="Tersinkron"></span><span><b>${esc(this.nama)}</b><span class="sub">${this.admin?"admin":"penilai"}</span></span><button class="btn sm ghost" id="uOut">Keluar</button>`;
+    d.innerHTML=`<span class="sdot" id="sdot" title="Tersinkron"></span><span><b>${esc(this.nama)}</b><span class="sub">${this.admin?"admin":"verifikator"}</span></span><button class="btn sm ghost" id="uOut">Keluar</button>`;
     t.insertBefore(d,t.firstChild);document.getElementById("uOut").onclick=()=>this.sb.auth.signOut();
   },
   setSync(st){this.sync=st;const d=document.getElementById("sdot");if(d){d.className="sdot "+st;d.title={ok:"Tersinkron",run:"Menyimpan…",err:"Gagal menyimpan — cek koneksi"}[st]}},
@@ -256,14 +256,14 @@ const ONL={
     v.innerHTML=`<div class="panel">
       ${this.admin?`<form id="tf" class="toolbar" autocomplete="off"><div class="field" style="flex:1;min-width:170px"><label>Nama pengguna</label><input id="tU" required class="tin" placeholder="mis. budi.s" pattern="[A-Za-z0-9][A-Za-z0-9._\\-]{2,39}" title="3–40 karakter: huruf, angka, titik, garis bawah, strip" autocapitalize="none" spellcheck="false"></div>
         <div class="field" style="flex:1;min-width:180px"><label>Nama lengkap</label><input id="tN" class="tin" placeholder="mis. Budi Santoso"></div>
-        <div class="field"><label>Peran</label><select id="tR"><option value="penilai">Penilai</option><option value="admin">Admin</option></select></div>
+        <div class="field"><label>Peran</label><select id="tR"><option value="penilai">Verifikator</option><option value="admin">Admin</option></select></div>
         <div class="field" style="min-width:170px"><label>Password</label><input id="tP" class="tin" minlength="8" required value="${buatPassword()}" style="font-family:monospace"></div>
         <button class="btn pri" type="submit" id="tGo">Buat akun</button></form>`:""}
       <div class="tw"><table><thead><tr><th>Nama pengguna / email</th><th>Nama</th><th>Peran</th><th></th></tr></thead><tbody>
-      ${data.map(p=>`<tr><td><b>${esc(namaAkun(p.email))}</b>${/@penilai\.local$/.test(p.email)?"":` <span class="sub">(email)</span>`}</td><td>${esc(p.nama||"")}</td><td><span class="pill ${p.peran==="admin"?"ok":"no"}">${p.peran}</span></td>
+      ${data.map(p=>`<tr><td><b>${esc(namaAkun(p.email))}</b>${/@penilai\.local$/.test(p.email)?"":` <span class="sub">(email)</span>`}</td><td>${esc(p.nama||"")}</td><td><span class="pill ${p.peran==="admin"?"ok":"no"}">${p.peran==="admin"?"admin":"verifikator"}</span></td>
         <td class="n" style="white-space:nowrap">${this.admin?`<button class="btn sm ghost" data-pw="${esc(p.email)}">Atur password</button>`:""}${this.admin&&p.email!==this.email?` <button class="btn sm ghost" data-del="${esc(p.email)}">Hapus</button>`:""}</td></tr>`).join("")}
       </tbody></table></div>
-      <p class="sub" style="margin-top:12px">Penilai baru tidak perlu email: buat nama pengguna dan password di sini, lalu bagikan ke penilai. Penilai masuk dengan nama pengguna dan password itu.</p></div>`;
+      <p class="sub" style="margin-top:12px">Verifikator baru tidak perlu email: buat nama pengguna dan password di sini, lalu bagikan. Ia masuk dengan nama pengguna dan password itu. Isi nama lengkap — nama itu yang tercatat sebagai "diverifikasi oleh" di rekap dan Excel.</p></div>`;
     const f=document.getElementById("tf");
     if(f)f.onsubmit=async ev=>{ev.preventDefault();const go=document.getElementById("tGo"),u=document.getElementById("tU").value.trim().toLowerCase(),pw=document.getElementById("tP").value;go.disabled=true;
       try{await this.kelola({aksi:"buat",pengguna:u,nama:document.getElementById("tN").value.trim(),peran:document.getElementById("tR").value,password:pw});
@@ -271,7 +271,7 @@ const ONL={
     v.querySelectorAll("[data-pw]").forEach(b=>b.onclick=async()=>{const em=b.dataset.pw,u=namaAkun(em);
       if(!await konfirmasi({judul:`Atur ulang password <em>${esc(u)}</em>?`,pesan:"Password lama tidak berlaku lagi. Password baru dibuat otomatis dan ditampilkan sekali.",ok:"Buat password baru",jenis:"info"}))return;
       const pw=buatPassword();try{await this.kelola({aksi:em.endsWith("@penilai.local")?"reset":"buat",email:em,password:pw,nama:(data.find(x=>x.email===em)||{}).nama,peran:(data.find(x=>x.email===em)||{}).peran});await this.tampilPassword(`Password baru <em>${esc(u)}</em>`,em.endsWith("@penilai.local")?u:em,pw)}catch(e){toast(e.message)}});
-    v.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(!await konfirmasi({judul:`Hapus <em>${esc(namaAkun(b.dataset.del))}</em> dari tim penilai?`,pesan:"Akun ini tidak bisa lagi membuka data penilaian. Nilai yang sudah ia masukkan tetap tersimpan.",ok:"Ya, hapus penilai"}))return;
+    v.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{if(!await konfirmasi({judul:`Hapus <em>${esc(namaAkun(b.dataset.del))}</em> dari tim verifikator?`,pesan:"Akun ini tidak bisa lagi membuka data penilaian. Nilai yang sudah ia masukkan tetap tersimpan.",ok:"Ya, hapus akun"}))return;
       try{await this.kelola({aksi:"hapus",email:b.dataset.del});this.vTim(v)}catch(e){toast(e.message)}});
   }
 };
