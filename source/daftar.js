@@ -12,7 +12,7 @@ function jabDariTujuan(t){t=String(t||"").toLowerCase();
 /* ---------- baca file daftar peserta ---------- */
 // Sumber: template Excel, ekspor sistem, atau langsung surat pemanggilan (.docx, Lampiran I "Daftar Tujuan Surat dan Asesi").
 const DPOLA=[["fileHint",/nama\s*file|file\s*jawaban/i],["instansi",/tujuan\s*surat|instansi|unit\s*kerja|satuan\s*kerja|^asal|^unit/i],["nip",/^nip\b|\bnip$/i],
-  ["kini",/jabatan\s*(saat\s*ini|sekarang|terakhir|asal)/i],["tujuan",/uji\s*kompetensi|tujuan\s*(jabatan|sertifikasi)|jabatan\s*(yang\s*)?(dituju|tujuan)|^tujuan$|jenjang/i],["jenis",/^jenis|jenis\s*sertifikasi/i],
+  ["kini",/jabatan\s*(saat\s*ini|sekarang|terakhir|asal)|^jabatan$/i],["tujuan",/uji\s*kompetensi|tujuan\s*(jabatan|sertifikasi)|jabatan\s*(yang\s*)?(dituju|tujuan)|^tujuan$|jenjang/i],["jenis",/^jenis|jenis\s*sertifikasi/i],
   ["nama",/^(nama(\s*(lengkap|peserta|asesi))?|asesi|peserta)$/i],["no",/^no\.?$/i]];
 // tujuan jabatan / uji kompetensi → kunci yang dipakai (PAD = Pengelolaan Arsip Dinamis dinilai dengan kunci Terampil/Mahir/PA)
 // Terampil, Mahir, PAD → kunci Terampil/Mahir/PA · Penyelia, Ahli Pertama → kunci Penyelia/Pertama · Ahli Muda (dan Madya) → kunci Muda

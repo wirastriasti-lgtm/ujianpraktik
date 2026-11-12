@@ -1,7 +1,7 @@
 """Template_Daftar_Peserta.xlsx — daftar peserta ujian praktik: nama, instansi, jabatan saat ini, tujuan sertifikasi.
   python3 source/buat_template_peserta.py OUT.xlsx                         -> template kosong
   python3 source/buat_template_peserta.py OUT.xlsx SURAT.docx "Instansi"   -> diisi dari Lampiran I surat pemanggilan
-Kategori & kunci penilaian dihitung otomatis dari tujuan sertifikasi (rumus Excel).
+Kolom: No, Nama, Instansi, Jabatan, Tujuan Sertifikasi.
 """
 import re, sys
 from openpyxl import Workbook
@@ -53,60 +53,33 @@ N = max(200, len(data) + 50)
 
 wb = Workbook(); ws = wb.active; ws.title = "DAFTAR PESERTA"
 ws["A1"] = "DAFTAR PESERTA UJIAN PRAKTIK SERTIFIKASI ARSIPARIS"; ws["A1"].font = Font(bold=True, size=13, color=NAVY)
-ws["A2"] = ("Isi mulai baris 5: nama, instansi, jabatan saat ini, dan tujuan sertifikasi. Kategori dan kunci penilaian terisi otomatis. "
-            "Nama ditulis sama dengan nama di file jawaban supaya bisa dicocokkan otomatis.")
+ws["A2"] = "Isi mulai baris 5: nama, instansi, jabatan, dan tujuan sertifikasi. Nama ditulis sama dengan nama di file jawaban supaya bisa dicocokkan otomatis."
 ws["A2"].font = Font(italic=True, color="5F6B76")
 ws["A3"] = "Kunci: Terampil, Mahir, PAD → kunci Terampil/Mahir · Penyelia, Ahli Pertama → kunci Penyelia/Pertama · Ahli Muda → kunci Ahli Muda"
 ws["A3"].font = Font(color=GOLD)
 H = [("No", 6, "Nomor urut."),
-     ("Nama", 36, "Nama lengkap peserta (gelar boleh ditulis)."),
-     ("NIP", 22, "Opsional, tapi membantu pencocokan bila nama file memuat NIP."),
-     ("Instansi", 30, "Instansi/unit kerja peserta."),
-     ("Jabatan Saat Ini", 28, "Mis. Pelaksana, Arsiparis Terampil, Arsiparis Ahli Pertama."),
-     ("Tujuan Sertifikasi", 28, "Pilih dari daftar: keterampilan (Terampil, Mahir, Penyelia), keahlian (Ahli Pertama, Muda, Madya), atau Pengelolaan Arsip Dinamis (PAD)."),
-     ("Kategori", 14, "Otomatis: Keterampilan / Keahlian / PAD."),
-     ("Kunci Penilaian", 22, "Otomatis: kunci jawaban yang dipakai untuk menilai peserta ini."),
-     ("Nama File Jawaban (opsional)", 32, "Kosongkan. Diisi bila nama file jauh berbeda dari nama peserta.")]
+     ("Nama", 38, "Nama lengkap peserta, sama dengan nama di file jawaban."),
+     ("Instansi", 34, "Instansi/unit kerja peserta."),
+     ("Jabatan", 30, "Jabatan saat ini, mis. Pelaksana, Arsiparis Terampil, Arsiparis Ahli Pertama."),
+     ("Tujuan Sertifikasi", 30, "Pilih: keterampilan (Terampil, Mahir, Penyelia), keahlian (Ahli Pertama, Muda, Madya), atau Pengelolaan Arsip Dinamis (PAD).")]
 for c, (h, w, tip) in enumerate(H, 1):
-    x = ws.cell(row=4, column=c, value=h); x.font = Font(bold=True, color="FFFFFF")
-    x.fill = PatternFill("solid", fgColor=("7F8B97" if h in ("Kategori", "Kunci Penilaian") else NAVY))
+    x = ws.cell(row=4, column=c, value=h); x.font = Font(bold=True, color="FFFFFF"); x.fill = PatternFill("solid", fgColor=NAVY)
     x.alignment = Alignment(wrap_text=True, vertical="center", horizontal="center"); x.border = BOX
     ws.column_dimensions[x.column_letter].width = w
     dv = DataValidation(type="custom", formula1="TRUE", allow_blank=True, showInputMessage=True, promptTitle=h[:32], prompt=tip[:255])
     ws.add_data_validation(dv); dv.add(f"{x.column_letter}5:{x.column_letter}{N + 4}")
-ws.row_dimensions[4].height = 34
+ws.row_dimensions[4].height = 30
 tj = DataValidation(type="list", formula1='"' + ",".join(TUJUAN) + '"', allow_blank=True, showErrorMessage=True, errorStyle="warning",
                     errorTitle="Tujuan sertifikasi", error="Pilih salah satu: " + ", ".join(TUJUAN) + ".")
-ws.add_data_validation(tj); tj.add(f"F5:F{N + 4}")
+ws.add_data_validation(tj); tj.add(f"E5:E{N + 4}")
 for i in range(N):
     r = i + 5
     ws.cell(row=r, column=1, value=i + 1)
     if i < len(data):
-        for c, v in enumerate(data[i], 2): ws.cell(row=r, column=c, value=v)
-    F = f"LOWER(F{r})"
-    ws.cell(row=r, column=7, value=f'=IF(F{r}="","",IF(OR(ISNUMBER(SEARCH("arsip dinamis",F{r})),ISNUMBER(SEARCH("PAD",F{r}))),"PAD",'
-                                    f'IF(OR(ISNUMBER(SEARCH("ahli",F{r})),ISNUMBER(SEARCH("pertama",F{r})),ISNUMBER(SEARCH("muda",F{r})),ISNUMBER(SEARCH("madya",F{r}))),"Keahlian","Keterampilan")))')
-    ws.cell(row=r, column=8, value=f'=IF(F{r}="","",IF(OR(ISNUMBER(SEARCH("muda",F{r})),ISNUMBER(SEARCH("madya",F{r}))),"Ahli Muda",'
-                                    f'IF(OR(ISNUMBER(SEARCH("pertama",F{r})),ISNUMBER(SEARCH("penyelia",F{r}))),"Penyelia / Ahli Pertama","Terampil / Mahir / PAD")))')
-    for c in range(1, 10):
-        x = ws.cell(row=r, column=c); x.border = BOX; x.alignment = Alignment(vertical="top", wrap_text=c in (2, 4, 5))
-        if c in (7, 8): x.fill = PatternFill("solid", fgColor=GREY)
-ws.freeze_panes = "C5"; ws.auto_filter.ref = f"A4:I{N + 4}"
-
-# ringkasan per tujuan
-s = wb.create_sheet("RINGKASAN")
-s["A1"] = "Ringkasan peserta per tujuan sertifikasi"; s["A1"].font = Font(bold=True, size=12, color=NAVY)
-for j, h in enumerate(["Tujuan Sertifikasi", "Kategori", "Kunci Penilaian", "Jumlah"], 1):
-    x = s.cell(row=3, column=j, value=h); x.font = Font(bold=True, color="FFFFFF"); x.fill = PatternFill("solid", fgColor=NAVY); x.border = BOX
-KAT = {"Pengelolaan Arsip Dinamis": ("PAD", "Terampil / Mahir / PAD")}
-for i, t in enumerate(TUJUAN, 4):
-    kat, kun = KAT.get(t, ("Keahlian" if "Ahli" in t else "Keterampilan",
-                           "Ahli Muda" if ("Muda" in t or "Madya" in t) else "Penyelia / Ahli Pertama" if ("Pertama" in t or "Penyelia" in t) else "Terampil / Mahir / PAD"))
-    for j, v in enumerate([t, kat, kun, f"=COUNTIF('DAFTAR PESERTA'!F:F,A{i})"], 1):
-        s.cell(row=i, column=j, value=v).border = BOX
-e = 4 + len(TUJUAN)
-s.cell(row=e, column=1, value="Total").font = Font(bold=True)
-s.cell(row=e, column=4, value=f"=SUM(D4:D{e - 1})").font = Font(bold=True)
-for c, w in zip("ABCD", (30, 14, 26, 10)): s.column_dimensions[c].width = w
+        nama, nip, ins, kini, tuj = data[i]
+        for c, v in enumerate([nama, ins, kini, tuj], 2): ws.cell(row=r, column=c, value=v)
+    for c in range(1, 6):
+        x = ws.cell(row=r, column=c); x.border = BOX; x.alignment = Alignment(vertical="top", wrap_text=c in (2, 3, 4))
+ws.freeze_panes = "C5"; ws.auto_filter.ref = f"A4:E{N + 4}"
 
 wb.save(OUT); print("daftar:", OUT, "peserta:", len(data))
