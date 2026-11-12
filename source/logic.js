@@ -239,7 +239,7 @@ function bacaUsul(g){
     const o={_col:col};for(const k in col)o[k]=col[k]>=0?String(g[r][col[k]]||"").trim():null;m.set(kk,o)}
   return m;
 }
-function namaDariFile(f){return f.replace(/\.[^.]+$/,"").replace(/^daftar[_\s-]*arsip[_\s-]*/i,"").replace(/_/g," ").replace(/\s+/g," ").trim()}
+function namaDariFile(f){return f.replace(/\.[^.]+$/,"").replace(/(\s*[-_]?\s*(\(\d+\)|\bcopy\b|\bsalinan\b|\bkopi\b))+\s*$/i,"").replace(/^daftar[_\s-]*arsip[_\s-]*/i,"").replace(/_/g," ").replace(/\s+/g," ").trim()}
 
 // Padankan baris DAFTAR BERKAS peserta dengan berkas kunci, bertahap:
 //  1) kode klasifikasi sama persis;

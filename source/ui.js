@@ -93,28 +93,46 @@ function dialogJabatan(beda){
     el.querySelector("[data-t=ok]").focus();
   });
 }
+// ---------- file ganda: ambil versi terbaru ----------
+// "Nama.xlsx", "Nama (1).xlsx", "Nama - Copy.xlsx", "Nama - Salinan (2).xlsx" dianggap file yang sama
+const POLA_SALINAN=/(\s*[-_]?\s*(\(\d+\)|\bcopy\b|\bsalinan\b|\bkopi\b))+\s*$/i;
+function dasarFile(n){return String(n).replace(/\.[^.]+$/,"").replace(POLA_SALINAN,"").replace(/[_\s]+/g," ").trim().toLowerCase()}
+function noSalinan(n){const b=String(n).replace(/\.[^.]+$/,"").trim();const m=b.match(/\((\d+)\)\s*$/);return m?+m[1]:/(copy|salinan|kopi)\s*$/i.test(b)?1:0}
+// a lebih baru dari b? pakai tanggal ubah file; bila sama/tidak ada, pakai nomor salinan; seri → a (yang baru diunggah) menang
+function versiLebihBaru(a,b){if(a.tgl&&b.tgl&&a.tgl!==b.tgl)return a.tgl>b.tgl;return noSalinan(a.file)>=noSalinan(b.file)}
+function isiSama(p,q){const t=o=>JSON.stringify({...(o||{}),tgl:0,identitas:0});return t(p)===t(q)}
+function saringGanda(list,kunciDari){const grup=new Map(),keluar=new Set();
+  list.forEach(x=>{const k=kunciDari(x);if(!k)return;if(!grup.has(k))grup.set(k,[]);grup.get(k).push(x)});
+  grup.forEach(g=>{if(g.length<2)return;const v=x=>({file:x.f.name,tgl:x.p.tgl});
+    let top=g[0];g.forEach(x=>{if(x!==top&&versiLebihBaru(v(x),v(top))&&!(noSalinan(x.f.name)===noSalinan(top.f.name)&&x.p.tgl===top.p.tgl))top=x});
+    g.forEach(x=>{if(x!==top){keluar.add(x);gagal.push([x.f.name,`File ganda — dipakai versi terbaru: ${top.f.name}`])}})});
+  return list.filter(x=>!keluar.has(x))}
 async function muat(list){
   if(!kunciJab(JAKTIF).length){toast("Upload kunci jawaban (file master) dulu.");return}
   const files=[...list].filter(f=>/\.xls[xm]?$/i.test(f.name)&&!f.name.startsWith("~$"));
   if(!files.length){toast("Tidak ada file Excel yang dipilih.");return}
   VIEW="muat";render();const pg=$("prog"),bar=pg&&pg.querySelector("i"),lbl=$("progl");
   if(pg)pg.style.display="block";
-  const baca=[];let skip=0;
+  let baca=[];let skip=0;
   for(let i=0;i<files.length;i++){const f=files[i];
     try{const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});
       if(wb.SheetNames.some(n=>/^MasterPraktik/i.test(n))){gagal.push([f.name,"File master/kunci, dilewati. Pakai tombol Upload kunci jawaban."]);skip++;continue}
       const p=parseWb(wb);
       // bukan file jawaban ujian praktik (tidak ada sheet DAFTAR BERKAS dengan kolom kode klasifikasi) → dilewati
       if(!p.db.length&&p.catatan.some(c=>/DAFTAR BERKAS tidak ditemukan/.test(c))){gagal.push([f.name,"Bukan file jawaban ujian praktik (tidak ada sheet DAFTAR BERKAS dengan kolom Kode Klasifikasi) — dilewati"]);skip++;continue}
-      p.identitas=bacaIdentitas(wb);baca.push({f,p,t:tebakJabatan(f.name,p)});
+      p.identitas=bacaIdentitas(wb);p.tgl=f.lastModified||0;baca.push({f,p,t:tebakJabatan(f.name,p)});
     }catch(e){gagal.push([f.name,e.message]);skip++}
     if(bar){bar.style.width=(100*(i+1)/files.length)+"%";lbl.textContent=`Membaca ${i+1} dari ${files.length} file…`}
     if(i%5===4)await new Promise(r=>setTimeout(r,0));
   }
+  // file ganda dalam satu unggahan (mis. "Nama.xlsx" dan "Nama (1).xlsx") → ambil versi terbaru
+  {const n0=baca.length;baca=saringGanda(baca,x=>dasarFile(x.f.name));skip+=n0-baca.length}
   let jabOf,pesertaOf=()=>null;
   if(DAFTAR.length){
     // ada daftar peserta: cocokkan tiap file ke daftar; jabatan ikut tujuan jabatan di daftar
-    baca.forEach(x=>{x.m=cocokkanFile(x.f.name,x.p);if(x.m.d&&x.m.d.file&&x.m.d.file!==x.f.name){x.m.status="duplikat";x.m.d=null}});
+    baca.forEach(x=>{x.m=cocokkanFile(x.f.name,x.p)});
+    // dua file berbeda nama yang cocok ke peserta yang sama → ambil versi terbaru
+    {const n0=baca.length;baca=saringGanda(baca,x=>x.m.d);skip+=n0-baca.length}
     let hasil=baca.map(x=>({d:x.m.d,jab:x.m.d&&x.m.d.jab?x.m.d.jab:(x.t?x.t.j:JAKTIF)}));
     if(baca.some(x=>!x.m.d||!x.m.d.jab)){hasil=await dialogCocok(baca);if(!hasil){VIEW="muat";render();toast("Upload dibatalkan");return}}
     jabOf=x=>hasil[baca.indexOf(x)].jab;pesertaOf=x=>hasil[baca.indexOf(x)].d;
@@ -125,16 +143,32 @@ async function muat(list){
   if(beda.length){pilih=await dialogJabatan(beda);if(!pilih){VIEW="muat";render();toast("Upload dibatalkan");return}}
   jabOf=x=>{const i=beda.indexOf(x);return i>=0?pilih[i]:JAKTIF};
   }
-  const per={};let ok=0;
-  for(const x of baca){const jab=jabOf(x);
-    if(!kunciJab(jab).length){gagal.push([x.f.name,"Kunci "+JAB[jab].label+" belum ada"]);skip++;continue}
-    const j=semua.findIndex(h=>h.file===x.f.name&&h.jab===jab);const h=nilaiParsed(x.p,x.f.name,jab);if(j>=0)semua[j]=h;else semua.push(h);ok++;per[jab]=(per[jab]||0)+1;
-    if(window.ONLINE)await ONL.simpanPeserta(h);
-    const d=pesertaOf(x);if(d)hubungkan(d,x.f.name,jab);
+  const per={};let ok=0,ganti=0;
+  for(const x of baca){const jab=jabOf(x),nf=x.f.name,dk=dasarFile(nf);let d=pesertaOf(x);
+    if(!kunciJab(jab).length){gagal.push([nf,"Kunci "+JAB[jab].label+" belum ada"]);skip++;continue}
+    // file peserta yang sama yang sudah dimuat sebelumnya (nama sama, salinan "(1)", atau file peserta daftar yang sama)
+    const lama=semua.filter(h=>h.file===nf||dasarFile(h.file)===dk||(d&&d.file&&h.file===d.file));
+    const baruV={file:nf,tgl:x.p.tgl},lebihBaru=lama.find(h=>!versiLebihBaru(baruV,{file:h.file,tgl:h.parsed&&h.parsed.tgl}));
+    if(lebihBaru){gagal.push([nf,`Versi lebih lama dari ${lebihBaru.file} yang sudah dimuat — dilewati, tetap pakai yang terbaru`]);skip++;continue}
+    const kn=jab+"|"+nf,pindah=[];
+    for(const o of lama){const ko=fKey(o);if(ko===kn)continue;
+      if(!d){const d0=DAFTAR.find(z=>z.file===o.file);if(d0)d=d0}
+      // nilai fisik ikut pindah (berkas fisiknya sama); koreksi ikut pindah hanya bila isi jawaban tidak berubah
+      if(FISIK[ko]&&o.jab===jab&&!FISIK[kn])FISIK[kn]=FISIK[ko];
+      const sama=isiSama(o.parsed,x.p);if(sama&&VER[ko]&&!VER[kn])VER[kn]=VER[ko];
+      if(!sama&&VER[ko]&&Object.values(VER[ko].kor||{}).some(v=>Object.keys(v||{}).length))gagal.push([nf,`Menggantikan ${o.file}. Isi jawaban berubah, jadi koreksi penilai pada file lama tidak dibawa — cek ulang.`]);
+      pindah.push(o)}
+    const h=nilaiParsed(x.p,nf,jab);
+    semua=semua.filter(o=>!pindah.includes(o)&&fKey(o)!==kn);semua.push(h);ok++;per[jab]=(per[jab]||0)+1;
+    if(window.ONLINE){await ONL.simpanPeserta(h);if(pindah.length){if(FISIK[kn])ONL.simpanFisik(h,FISIK[kn]);if(VER[kn])ONL.simpanVer(h,VER[kn])}}
+    for(const o of pindah){const ko=fKey(o);if(window.ONLINE)await ONL.hapusSatu(o);delete VER[ko];delete FISIK[ko];if(FSEL===ko)FSEL=kn;ganti++}
+    if(pindah.length&&!window.ONLINE){try{localStorage.setItem(VKEY,JSON.stringify(VER))}catch(e){}simpanFisik()}
+    if(d)hubungkan(d,nf,jab);
   }
+  if(ganti)lepasYangHilang();
   const ke=Object.entries(per).map(([j,n])=>n+" ke "+JAB[j].label).join(", ");
   if(per[JAKTIF]===undefined&&Object.keys(per).length===1)JAKTIF=Object.keys(per)[0];
-  toast(`${ok} peserta dimuat${ke?" ("+ke+")":""}`+(skip?` · ${skip} file dilewati (lihat Catatan)`:""));
+  toast(`${ok} peserta dimuat${ke?" ("+ke+")":""}`+(ganti?` · ${ganti} file lama diganti versi terbaru`:"")+(skip?` · ${skip} file dilewati (lihat Catatan)`:""));
   VIEW="rekap";render();
 }
 // Kunci per jabatan: tiap jabatan dari sheet MasterPraktik…-nya sendiri (4 berkas, kolom A–N) + notes (comment) sel di sheet itu.
