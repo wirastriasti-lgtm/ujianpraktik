@@ -119,6 +119,38 @@ for name, label, ket, abu in JAB:
     ws.freeze_panes = "B5"
     ws.sheet_view.zoomScale = 90
 
+# ---------- pemetaan naskah (untuk platform digital) ----------
+pm = wb.create_sheet("PEMETAAN_NASKAH")
+pm["A1"] = "PEMETAAN NASKAH → BERKAS KUNCI (khusus admin, jangan dibagikan ke peserta)"
+pm["A1"].font = Font(bold=True, size=13, color=NAVY)
+pm["A2"] = ("Satu baris = satu naskah/file bahan ujian. ID Naskah netral (N01, N02, … atau kode acak) — jangan memuat kode klasifikasi, "
+            "nama berkas, atau urutan. Nama file asli hanya untuk panitia.")
+pm["A2"].font = Font(italic=True, color="5F6B76")
+pm["A3"] = "Satu naskah hanya milik satu berkas kunci. Naskah pengecoh (tidak masuk berkas mana pun) tulis Berkas Kunci = 0."
+pm["A3"].font = Font(color=GOLD)
+PH = [("ID Naskah", 12, "Kode netral yang tampil ke peserta, mis. N07."),
+      ("Nama File Asli", 34, "Nama file di komputer panitia (tidak tampil ke peserta)."),
+      ("Berkas Kunci (No)", 12, "Nomor berkas kunci 1–4 (baris 5–8 di sheet MasterPraktik). 0 = naskah pengecoh."),
+      ("Urutan dalam Berkas", 12, "Urutan seharusnya di dalam folder (1 = paling awal/tertua)."),
+      ("Tanggal Naskah", 14, "Tanggal naskah (YYYY-MM-DD), dipakai bila urutan dinilai."),
+      ("Uraian Item", 40, "Uraian informasi arsip/item untuk naskah ini (sama dengan daftar isi berkas kunci)."),
+      ("Jumlah Lembar", 10, "Opsional."),
+      ("Berlaku untuk", 22, "Kosong = semua jenjang. Atau tulis: TerampilMahirPA / PenyeliaPertama / Muda (pisah koma).")]
+for k, (judul, lebar, tip) in enumerate(PH, 1):
+    h = pm.cell(row=4, column=k, value=judul); h.font = Font(bold=True, color="FFFFFF"); h.fill = PatternFill("solid", fgColor=NAVY)
+    h.alignment = Alignment(wrap_text=True, vertical="center", horizontal="center"); h.border = BOX
+    pm.column_dimensions[h.column_letter].width = lebar
+    dv = DataValidation(type="custom", formula1="TRUE", allow_blank=True, showInputMessage=True, promptTitle=judul[:32], prompt=tip[:255])
+    pm.add_data_validation(dv); dv.add(f"{h.column_letter}5:{h.column_letter}64")
+pm.row_dimensions[4].height = 36
+bk = DataValidation(type="whole", operator="between", formula1="0", formula2="4", allow_blank=True, showErrorMessage=True,
+                    errorTitle="Berkas kunci", error="Isi 1–4, atau 0 untuk naskah pengecoh.")
+pm.add_data_validation(bk); bk.add("C5:C64")
+for r in range(5, 65):
+    for k in range(1, len(PH) + 1):
+        c = pm.cell(row=r, column=k); c.border = BOX; c.alignment = Alignment(vertical="top", wrap_text=k in (2, 6))
+pm.freeze_panes = "B5"
+
 wb.active = 1
 wb.save(OUT)
 print("template:", OUT)
