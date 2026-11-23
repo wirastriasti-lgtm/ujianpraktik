@@ -345,7 +345,10 @@ function dialogKunci(m,fname){
     el.innerHTML=`<div class="mbox" role="dialog" aria-modal="true"><div class="eyebrow">Periksa kunci jawaban</div>
       <h2>${nE?`Kunci <em>belum valid</em>.`:`Kunci <em>siap dipakai</em>.`}</h2>
       <p class="sub" style="font-size:13.5px;margin:0 0 14px">${esc(fname)} · ${nE?`<b style="color:var(--red)">${nE} kesalahan</b> harus diperbaiki di Excel lalu unggah ulang`:"tidak ada kesalahan format"}${nW?` · <b style="color:var(--amber)">${nW} peringatan</b> perlu dicek`:""}</p>
-      ${window.ONLINE&&!nE?`<label class="mfield">Nama angkatan<input id="mAng" value="${esc(a?"Angkatan "+a[1].toUpperCase():"")}" placeholder="mis. Angkatan XI"></label>`:""}
+      ${window.ONLINE&&!nE?(()=>{const kini=ONL.angkatanKini(),saran=a?"Angkatan "+a[1].toUpperCase():"";return`<div class="mmode">
+        <label class="mopt"><input type="radio" name="mMode" value="baru" checked><span><b>Angkatan baru</b><span class="sub">Kunci ini membuka angkatan baru dengan daftar peserta, nilai, dan verifikasi sendiri. Angkatan lain tidak berubah.</span>
+          <span class="mfield" style="margin:8px 0 0">Nama angkatan<input id="mAng" value="${esc(saran)}" placeholder="mis. Kejaksaan Angkatan IV"></span></span></label>
+        ${kini?`<label class="mopt"><input type="radio" name="mMode" value="perbarui"><span><b>Perbarui kunci “${esc(kini)}”</b><span class="sub">Untuk memperbaiki kunci angkatan yang sedang dibuka. Peserta, nilai fisik, koreksi, dan verifikasi tetap; nilai daftar arsip dihitung ulang dengan kunci baru.</span></span></label>`:""}</div>`})():""}
       <div class="mjab">${Object.keys(JAB_SHEET).map(j=>{const x=m.jab[j],v=V[j];return`<div class="mj ${v.E.length?"bad":v.W.length?"warn":"ok"}">
         <div class="mjh"><b>${esc(JAB[j].label)}</b><span class="pill ${v.E.length?"bad":v.W.length?"warn":"ok"}">${v.E.length?v.E.length+" kesalahan":v.W.length?v.W.length+" peringatan":"valid"}</span></div>
         <div class="sub">sheet ${esc(x.pinjam?(x.sheetKosong||JAB_SHEET[j].label+" (tidak ada)"):x.sheet)}${x.kolom&&!x.pinjam?` · kolom terbaca: KKA ${x.kolom.kk}, indeks ${x.kolom.indeks||"–"}, uraian ${x.kolom.uraian}, jumlah ${x.kolom.jumlah||"–"}, SKKA ${x.kolom.skka||"–"}${j!=="terampil"?`, retensi ${x.kolom.aktif||"–"}/${x.kolom.inaktif||"–"}, nasib ${x.kolom.nasib||"–"}`:""}`:""}</div>
@@ -358,7 +361,12 @@ function dialogKunci(m,fname){
     const esc_=e=>{if(e.key==="Escape")tutup(null)};document.addEventListener("keydown",esc_);
     el.querySelector("[data-t=tpl]").onclick=unduhTemplate;
     el.querySelector("[data-t=batal]").onclick=()=>tutup(null);
-    const ok=el.querySelector("[data-t=ok]");if(ok){ok.onclick=()=>{const i=el.querySelector("#mAng");if(i&&!i.value.trim()){i.focus();return}tutup({angkatan:i?i.value.trim():""})};ok.focus()}
+    const ok=el.querySelector("[data-t=ok]");if(ok){ok.onclick=()=>{const i=el.querySelector("#mAng"),md=(el.querySelector("[name=mMode]:checked")||{}).value||"baru";
+        if(md==="baru"&&i&&!i.value.trim()){i.focus();return}
+        if(md==="baru"&&i&&window.ONLINE&&ONL.kunciList.some(k=>k.angkatan.trim().toLowerCase()===i.value.trim().toLowerCase())){toast("Nama angkatan itu sudah ada. Pakai nama lain, atau pilih Perbarui kunci.");i.focus();return}
+        tutup({mode:md,angkatan:i?i.value.trim():""})};ok.focus()
+      el.querySelectorAll("[name=mMode]").forEach(r=>r.onchange=()=>{const i=el.querySelector("#mAng");if(i)i.disabled=r.value!=="baru"&&r.checked;ok.textContent=(el.querySelector("[name=mMode]:checked")||{}).value==="perbarui"?"Perbarui kunci":"Buat angkatan baru"});
+      if(window.ONLINE)ok.textContent="Buat angkatan baru"}
     el.onclick=e=>{if(e.target===el)tutup(null)};
   });
 }
@@ -372,7 +380,7 @@ async function muatKunci(f){
     const wb=XLSX.read(await f.arrayBuffer(),{type:"array"});
     const m=bacaKunciMaster(wb);
     const ok=await dialogKunci(m,f.name);if(!ok)return;
-    if(window.ONLINE){await ONL.simpanKunciBaru(m,f.name,ok.angkatan);return}
+    if(window.ONLINE){if(ok.mode==="perbarui")await ONL.perbaruiKunci(m,f.name);else await ONL.simpanKunciBaru(m,f.name,ok.angkatan);return}
     Object.values(m.jab).forEach(x=>x.k.forEach(k=>{if(k.unsurTemplate){k.unsur=k.unsurSimpan;HOOK.unsur(k)}}));
     pasangKunciJab(m.jab);KUNCI_SRC=f.name;muatKataWajib();nilaiUlang();VIEW="kunci";render();
     toast("Kunci dimuat per jabatan — "+Object.keys(m.jab).map(j=>JAB[j].label+": "+(m.jab[j].pinjam?"pakai "+m.jab[j].sheet:m.jab[j].sheet)).join(" · "));
@@ -382,6 +390,7 @@ function nilaiUlang(){semua=semua.map(h=>nilaiParsed(h.parsed,h.file,h.jab))}
 
 /* ================= RENDER ================= */
 const VIEWS=[["muat","Muat data"],["daftar","Daftar peserta"],["rekap","Rekap peserta"],["fisik","Penilaian fisik"],["detail","Rincian per berkas"],["kunci","Kunci & rules"],["cat","Catatan"]].concat(window.ONLINE?[["tim","Tim verifikator"]]:[]);
+if(window.ONLINE)VIEWS.unshift(["angkatan","Angkatan"]);
 const HEAD={
   muat:["Muat jawaban <em>peserta</em>.","Pilih jabatan di menu atas, pastikan kunci jawaban sudah sesuai angkatan, lalu muat folder berisi file Excel jawaban peserta. Semua diproses di laptop ini — tanpa internet, tanpa unggah ke mana pun."],
   rekap:["Rekap nilai <em>peserta</em>.","Nilai daftar arsip dihitung otomatis; nilai fisik diisi verifikator. Setelah berkas dicek dan nilai fisik lengkap, klik <b>Verifikasi</b> di baris peserta — nama verifikator tercatat di sini dan di Excel."],
@@ -390,6 +399,7 @@ const HEAD={
   kunci:["Kunci jawaban & <em>rules</em>.","Kunci dibaca dari file master angkatan. Unsur uraian menentukan seberapa ketat penilaian uraian informasi — sesuaikan bila angkatan berganti."],
   cat:["Catatan & <em>masalah file</em>.","File yang gagal dibaca, sheet yang tidak ditemukan, atau berkas yang tidak bisa dicocokkan dengan kunci."],
   daftar:["Daftar <em>peserta</em>.","Upload daftar resmi peserta (nama, jenis sertifikasi, tujuan jabatan). File jawaban otomatis dicocokkan ke daftar ini dan dinilai sesuai tujuan jabatannya, dan peserta yang belum mengumpulkan langsung terlihat."],
+  angkatan:["Semua <em>angkatan</em>.","Setiap angkatan punya kunci, daftar peserta, nilai, koreksi, dan verifikasinya sendiri. Buka angkatan untuk bekerja; angkatan lama tetap tersimpan dan bisa dibuka kapan saja."],
   tim:["Tim <em>verifikator</em>.","Hanya akun yang terdaftar di sini yang bisa membuka data penilaian. Verifikator mengecek berkas, mengoreksi nilai, menilai fisik, dan memverifikasi peserta; admin juga mengelola akun, kunci, dan daftar peserta."]
 };
 function render(){
@@ -397,7 +407,7 @@ function render(){
   $("jnav").innerHTML=Object.entries(JAB).map(([k,v])=>`<button class="${k===JAKTIF?"on":""}" data-j="${k}">${v.label}<span class="cnt">${semua.filter(h=>h.jab===k).length}</span></button>`).join("");
   $("jnav").querySelectorAll("button").forEach(b=>b.onclick=()=>{JAKTIF=b.dataset.j;FSEL=null;if(!pesertaAktif().length&&VIEW!=="kunci")VIEW="muat";render()});
   const nFis=hasil.filter(h=>rataFisik(h)!==null).length,nCek=hasil.filter(perluCek).length,nCat=hasil.reduce((a,h)=>a+h.catatan.length,0)+gagal.length;
-  const badge={muat:"",rekap:hasil.length,fisik:hasil.length?`${nFis}/${hasil.length}`:"",detail:nCek?nCek:"",kunci:KUNCI.length,cat:nCat||"",tim:"",daftar:DAFTAR.length?`${DAFTAR.filter(d=>d.file&&semua.some(h=>h.file===d.file)).length}/${DAFTAR.length}`:""};
+  const badge={angkatan:window.ONLINE?ONL.kunciList.length||"":"",muat:"",rekap:hasil.length,fisik:hasil.length?`${nFis}/${hasil.length}`:"",detail:nCek?nCek:"",kunci:KUNCI.length,cat:nCat||"",tim:"",daftar:DAFTAR.length?`${DAFTAR.filter(d=>d.file&&semua.some(h=>h.file===d.file)).length}/${DAFTAR.length}`:""};
   $("snav").innerHTML=VIEWS.map(([k,l])=>`<button class="${k===VIEW?"on":""}" data-v="${k}"><span class="dot"></span>${l}${badge[k]!==""?`<span class="badge ${(k==="cat"&&nCat)||(k==="detail"&&nCek)?"warn":""}">${badge[k]}</span>`:""}</button>`).join("");
   $("snav").querySelectorAll("button").forEach(b=>b.onclick=()=>{VIEW=b.dataset.v;render();window.scrollTo({top:0})});
   $("kcard").innerHTML=(window.ONLINE?ONL.kartuKunci():"")+`<div class="kname">${esc(KUNCI_SRC)}</div><div class="ksub">Kunci ${esc(JA.label)}: ${KUNCI.length} berkas · sheet ${esc(KUNCI_SHEET||"–")}</div>${(KJ_META[JAKTIF]||{}).pinjam?`<div class="ksub" style="color:var(--amber)">Belum ada sheet khusus jabatan ini — sementara memakai kunci TerampilMahirPA.</div>`:""}<div class="kk">${KUNCI.map(k=>`<span class="tag">${esc(k.kk)}</span>`).join("")}</div><button class="btn sm" id="kUp"><span class="plus">+</span> Upload kunci jawaban</button><button class="btn sm ghost" id="kTpl" style="margin-top:6px">Unduh template kunci</button>`;
@@ -409,20 +419,22 @@ function render(){
 
   const [title,lead]=HEAD[VIEW];
   const da=hasil.length?hasil.reduce((a,h)=>a+h.rata,0)/hasil.length:null;
-  const ringkas=VIEW==="rekap"||VIEW==="detail",compact=ringkas||["fisik","kunci","cat","tim","daftar"].includes(VIEW);
+  const ringkas=VIEW==="rekap"||VIEW==="detail",compact=ringkas||["fisik","kunci","cat","tim","daftar","angkatan"].includes(VIEW);
   const tombolMuat=`<button class="btn sm" data-act="folder"><span class="plus">+</span> Muat folder</button><button class="btn sm" data-act="files"><span class="plus">+</span> Muat file</button>`;
-  let out=ringkas?`<div class="hrow"><div><div class="eyebrow">Ujian praktik sertifikasi · ${esc(JA.label)}</div><h1 class="sm">${title}</h1></div><div class="hact">${tombolMuat}</div></div><p class="lead xs">${lead}</p>${stripProgres(hasil,JA,da)}`
-  :`<div class="eyebrow">Ujian praktik sertifikasi · ${esc(JA.label)}</div><h1 class="${compact?"sm":""}">${title}</h1><p class="lead ${compact?"sm":""}">${lead}</p>
+  let out=ringkas?`<div class="hrow"><div><div class="eyebrow">${judulAngkatan()}${esc(JA.label)}</div><h1 class="sm">${title}</h1></div><div class="hact">${tombolMuat}</div></div><p class="lead xs">${lead}</p>${stripProgres(hasil,JA,da)}`
+  :`<div class="eyebrow">${judulAngkatan()}${VIEW==="angkatan"||VIEW==="tim"?"Semua jabatan":esc(JA.label)}</div><h1 class="${compact?"sm":""}">${title}</h1><p class="lead ${compact?"sm":""}">${lead}</p>
   ${compact?"":`<div class="actions"><button class="btn" data-act="folder"><span class="plus">+</span> Muat folder jawaban</button><button class="btn" data-act="files"><span class="plus">+</span> Muat file</button><button class="btn" data-act="kunci"><span class="plus">+</span> Upload kunci jawaban</button></div>
   <div class="rule"></div>${stripProgres(hasil,JA,da)}`}`;
   out+=`<div id="view"></div>`;
   $("main").innerHTML=out;
+  $("main").querySelectorAll("[data-ang]").forEach(b=>b.onclick=()=>{VIEW="angkatan";render()});
   $("main").querySelectorAll("[data-pf]").forEach(b=>b.onclick=()=>{const[vw,f]=b.dataset.pf.split(":");VIEW=vw;if(vw==="rekap")UI.filter=f;else if(vw==="detail")UI.donly=f;render()});
   $("main").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>({folder:()=>$("fDir").click(),files:()=>$("fFiles").click(),kunci:()=>$("fKunci").click()})[b.dataset.act]());
   const v=$("view");
-  ({muat:vMuat,daftar:vDaftar,rekap:vRekap,fisik:vFisik,detail:vDetail,kunci:vKunci,cat:vCat,tim:(v)=>ONL.vTim(v)})[VIEW](v,hasil,JA);
+  ({muat:vMuat,daftar:vDaftar,rekap:vRekap,fisik:vFisik,detail:vDetail,kunci:vKunci,cat:vCat,tim:(v)=>ONL.vTim(v),angkatan:(v)=>ONL.vAngkatan(v)})[VIEW](v,hasil,JA);
 }
 
+function judulAngkatan(){const n=window.ONLINE?ONL.angkatanKini():"";return n?`<button class="angb" data-ang title="Lihat semua angkatan">${esc(n)}</button> · `:"Ujian praktik sertifikasi · "}
 // Strip progres: alur unggah → cek berkas → nilai fisik → verifikasi (jabatan aktif; baris kecil = semua jabatan). Klik = filter.
 function stripProgres(hasil,JA,da){
   const N=hasil.length,dft=DAFTAR.filter(d=>d.jab===JAKTIF).length,target=dft||N;
@@ -682,7 +694,7 @@ function unduh(){
   if(DAFTAR.length){const bm=DAFTAR.filter(d=>(d.jab===JAKTIF||!d.jab)&&!(d.file&&semua.some(h=>h.file===d.file)));
     const ws5=XLSX.utils.aoa_to_sheet([["No","Nama","NIP","Instansi","Jabatan Saat Ini","Tujuan Sertifikasi","Kategori","Jenis Sertifikasi"],...bm.map(d=>[d.no,d.nama,d.nip,d.instansi,d.jabatanKini||"",d.tujuan,kategoriTujuan(d.tujuan),d.jenis])]);ws5["!cols"]=[{wch:5},{wch:36},{wch:22},{wch:36},{wch:26},{wch:24}];
     XLSX.utils.book_append_sheet(wb,ws5,"Belum Mengumpulkan")}
-  XLSX.writeFile(wb,"Penilaian_Ujian_Praktik_"+JA.label.replace(/[^A-Za-z]+/g,"_")+".xlsx");
+  XLSX.writeFile(wb,"Penilaian_"+String(KUNCI_SRC.split(" · ")[0]||"Ujian_Praktik").replace(/\.xlsx$/i,"").replace(/[^A-Za-z0-9]+/g,"_")+"_"+JA.label.replace(/[^A-Za-z]+/g,"_")+".xlsx");
   toast("Excel "+JA.label+" diunduh");
 }
 
@@ -701,7 +713,7 @@ async function kosongkanJabatan(){const JA=JAB[JAKTIF];if(!await confirmKosong(J
 // Jendela konfirmasi bergaya tool (pengganti confirm() bawaan browser). Hasil: Promise<boolean>
 const IKON={hapus:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14"/><path d="M10 11v6M14 11v6"/></svg>',
   tanya:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.5"/></svg>'};
-function konfirmasi({judul,pesan,stat,catatan,ok="Ya, hapus",batal="Batal",jenis="hapus",ekstra}){
+function konfirmasi({judul,pesan,stat,catatan,ok="Ya, hapus",batal="Batal",jenis="hapus",ekstra,isian,ketik}){
   return new Promise(res=>{
     const el=document.createElement("div");el.className="modal cf";
     el.innerHTML=`<div class="cbox ${jenis}" role="alertdialog" aria-modal="true" aria-labelledby="cfJ">
@@ -710,14 +722,20 @@ function konfirmasi({judul,pesan,stat,catatan,ok="Ya, hapus",batal="Batal",jenis
       <h2 id="cfJ">${judul}</h2>${pesan?`<p class="cmsg">${pesan}</p>`:""}
       ${stat&&stat.length?`<div class="cstat">${stat.map(([n,l])=>`<div><b>${n}</b><span>${esc(l)}</span></div>`).join("")}</div>`:""}
       ${catatan?`<div class="cnote">${catatan}</div>`:""}
+      ${isian?`<label class="mfield" style="margin-top:12px">${isian.label}<input id="cfIn" value="${esc(isian.value||"")}" placeholder="${esc(isian.placeholder||"")}"></label>`:""}
+      ${ketik?`<div class="ketik"><div>Untuk melanjutkan, ketik <b>${esc(ketik)}</b></div><input id="cfKt" autocomplete="off" spellcheck="false" aria-label="Ketik ${esc(ketik)}"></div>`:""}
       <div class="cbar">${ekstra?`<button class="btn ghost sm" data-t="x">${ekstra.label}</button>`:""}<span style="flex:1"></span><button class="btn" data-t="batal">${batal}</button><button class="btn ${jenis==="hapus"?"dangerf":"pri"}" data-t="ok">${ok}</button></div></div>`;
     document.body.appendChild(el);requestAnimationFrame(()=>el.classList.add("in"));
     const tutup=v=>{document.removeEventListener("keydown",kd);el.classList.remove("in");setTimeout(()=>el.remove(),140);res(v)};
     const kd=e=>{if(e.key==="Escape")tutup(false)};document.addEventListener("keydown",kd);
     el.onclick=e=>{if(e.target===el)tutup(false)};
-    el.querySelector("[data-t=batal]").onclick=()=>tutup(false);el.querySelector("[data-t=ok]").onclick=()=>tutup(true);
+    el.querySelector("[data-t=batal]").onclick=()=>tutup(false);
+    const okB=el.querySelector("[data-t=ok]"),inp=el.querySelector("#cfIn"),kt=el.querySelector("#cfKt");
+    okB.onclick=()=>{if(inp){const v=inp.value.trim();if(!v){inp.focus();return}tutup(v)}else tutup(true)};
+    if(kt){okB.disabled=true;kt.oninput=()=>{okB.disabled=kt.value.trim()!==ketik};kt.onkeydown=e=>{if(e.key==="Enter"&&!okB.disabled)okB.click()}}
+    if(inp)inp.onkeydown=e=>{if(e.key==="Enter")okB.click()};
     const x=el.querySelector("[data-t=x]");if(x)x.onclick=()=>ekstra.fn();
-    el.querySelector(jenis==="hapus"?"[data-t=batal]":"[data-t=ok]").focus();
+    (inp||kt||el.querySelector(jenis==="hapus"?"[data-t=batal]":"[data-t=ok]")).focus();
   });
 }
 function confirmKosong(JA){

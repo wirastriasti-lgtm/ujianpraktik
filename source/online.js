@@ -101,7 +101,7 @@ const ONL={
     pasangKunciJab(jab);KUNCI_SRC=data.angkatan+" · "+(data.sumber||"");muatKataWajib();
   },
   async gantiKunci(id){this.kunciId=id;try{localStorage.setItem("kunciDipilih",String(id))}catch(e){}
-    semua=[];FISIK={};VER={};DAFTAR=[];FSEL=null;await this.pakaiKunci();await this.muatData();this.dengar();toast("Kunci aktif: "+KUNCI_SRC)},
+    semua=[];FISIK={};VER={};DAFTAR=[];FSEL=null;await this.pakaiKunci();await this.muatData();this.dengar();toast("Angkatan dibuka: "+this.angkatanKini())},
   async simpanKunciBaru(m,fname,angkatan){
     if(!this.admin){toast("Hanya admin yang bisa mengunggah kunci.");return}
     if(!angkatan)return;
@@ -113,7 +113,49 @@ const ONL={
     await this.muatKunciList();await this.gantiKunci(data.id);VIEW="kunci";render();
     toast("Kunci "+angkatan+" dimuat per jabatan"+(m.warn.length?" · "+m.warn.join("; "):". Cek unsur uraian tiap jabatan di halaman ini."));
   },
-  async jadikanAktif(id){const r=await this.sb.rpc("aktifkan_kunci",{p_id:id});if(r.error){toast(r.error.message);return}await this.muatKunciList();render();toast("Kunci ini sekarang jadi kunci aktif untuk semua penilai")},
+  angkatanKini(){const k=this.kunciList.find(x=>x.id===this.kunciId);return k?k.angkatan:""},
+  async perbaruiKunci(m,fname){
+    if(!this.admin){toast("Hanya admin yang bisa mengubah kunci.");return}
+    const berkas={};Object.keys(m.jab).forEach(j=>{const{cacat,sheetKosong,kolom,...x}=m.jab[j];berkas[j]={...x,k:x.k.map(k=>({...k,unsurSimpan:k.unsurSimpan||unsurBawaan(k)}))}});
+    const sheets=[...new Set(Object.values(m.jab).map(x=>x.sheet))].join(", ");
+    const{error}=await this.sb.from("kunci").update({sumber:fname,sheet:sheets,berkas,updated_at:new Date().toISOString(),updated_by:this.email}).eq("id",this.kunciId);
+    if(error){toast("Gagal memperbarui kunci: "+error.message);return}
+    await this.muatKunciList();nilaiUlang();VIEW="kunci";render();
+    toast("Kunci "+this.angkatanKini()+" diperbarui — nilai daftar arsip dihitung ulang, data peserta tetap")},
+  async ambilLintas(tabel,kolom){let out=[],from=0;for(;;){const{data,error}=await this.sb.from(tabel).select(kolom).range(from,from+999);if(error)throw error;out=out.concat(data);if(data.length<1000)return out;from+=1000}},
+  async vAngkatan(v){
+    v.innerHTML=`<div class="panel"><div class="sub">Memuat ringkasan angkatan…</div></div>`;
+    let P=[],F=[],V=[],D=[];
+    try{[P,F,V,D]=await Promise.all([this.ambilLintas("peserta","kunci_id,jabatan"),this.ambilLintas("fisik","kunci_id,selesai"),this.ambilLintas("verifikasi","kunci_id,final:data->final"),this.ambilLintas("daftar_peserta","kunci_id")])}
+    catch(e){v.innerHTML=`<div class="panel">Gagal memuat: ${esc(e.message)}</div>`;return}
+    const hit=(arr,id,f=()=>true)=>arr.filter(x=>x.kunci_id===id&&f(x)).length;
+    const tgl=t=>t?new Date(t).toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"}):"–";
+    v.innerHTML=`<div class="panel">
+      ${this.admin?`<div class="toolbar" style="justify-content:space-between;align-items:center"><span class="sub">Kunci yang diunggah sebagai <b>angkatan baru</b> otomatis membuka angkatan baru. Untuk memperbaiki kunci angkatan yang sedang berjalan, pilih <b>Perbarui kunci</b> saat mengunggah.</span><button class="btn pri" id="aBaru"><span class="plus">+</span> Angkatan baru</button></div>`:""}
+      <div class="tw"><table><thead><tr><th>Angkatan</th><th>File kunci</th><th class="n">Daftar peserta</th><th class="n">File masuk</th><th class="n">Fisik selesai</th><th class="n">Terverifikasi</th><th>Diubah</th><th></th></tr></thead><tbody>
+      ${this.kunciList.map(k=>{const n=hit(P,k.id),per=Object.keys(JAB).map(j=>hit(P,k.id,x=>x.jabatan===j)),fs=hit(F,k.id,x=>x.selesai),vf=hit(V,k.id,x=>x.final),dp=hit(D,k.id),buka=k.id===this.kunciId;
+        return`<tr${buka?' style="background:var(--line2)"':""}><td><b>${esc(k.angkatan)}</b> ${buka?'<span class="pill no">sedang dibuka</span>':""}${k.aktif?' <span class="pill ok" title="Dibuka otomatis untuk semua verifikator saat masuk">aktif</span>':""}</td>
+          <td class="sub" style="max-width:260px">${esc(k.sumber||"–")}</td><td class="n">${dp||"–"}</td>
+          <td class="n"><b>${n}</b><div class="sub">${Object.keys(JAB).map((j,i)=>`${JAB[j].label.split(" ")[0]} ${per[i]}`).join(" · ")}</div></td>
+          <td class="n">${fs}<div class="sub">${n?Math.round(100*fs/n):0}%</div></td><td class="n">${vf}<div class="sub">${n?Math.round(100*vf/n):0}%</div></td>
+          <td class="sub">${tgl(k.updated_at)}</td>
+          <td class="n" style="white-space:nowrap">${buka?"":`<button class="btn sm" data-buka="${k.id}">Buka</button>`} <button class="rowm" data-am="${k.id}" aria-label="Tindakan lain untuk ${esc(k.angkatan)}">⋯</button></td></tr>`}).join("")}
+      </tbody></table>${this.kunciList.length?"":`<div class="empty">Belum ada angkatan. Unggah kunci jawaban untuk membuat angkatan pertama.</div>`}</div>
+      <p class="sub" style="margin-top:12px">Angkatan <b>aktif</b> adalah yang terbuka otomatis saat verifikator masuk. Verifikator tetap bisa membuka angkatan lain lewat tombol Buka atau pilihan angkatan di samping.</p></div>`;
+    const b=document.getElementById("aBaru");if(b)b.onclick=()=>document.getElementById("fKunci").click();
+    v.querySelectorAll("[data-buka]").forEach(x=>x.onclick=async()=>{await this.gantiKunci(Number(x.dataset.buka));VIEW="rekap";render()});
+    v.querySelectorAll("[data-am]").forEach(x=>x.onclick=e=>{e.stopPropagation();const k=this.kunciList.find(z=>z.id===Number(x.dataset.am));if(!k)return;const n=hit(P,k.id);
+      menuBaris(x,[...(k.id!==this.kunciId?[["Buka angkatan ini",async()=>{await this.gantiKunci(k.id);VIEW="rekap";render()}]]:[]),
+        ...(this.admin&&!k.aktif?[["Jadikan angkatan aktif",async()=>{await this.jadikanAktif(k.id);this.vAngkatan(v)}]]:[]),
+        ...(this.admin?[["Ganti nama…",async()=>{const nm=await konfirmasi({judul:`Ganti nama <em>${esc(k.angkatan)}</em>`,isian:{label:"Nama angkatan",value:k.angkatan},ok:"Simpan",jenis:"info"});if(!nm||nm===k.angkatan)return;
+            if(this.kunciList.some(z=>z.id!==k.id&&z.angkatan.trim().toLowerCase()===nm.toLowerCase())){toast("Nama itu sudah dipakai angkatan lain");return}
+            const{error}=await this.sb.from("kunci").update({angkatan:nm}).eq("id",k.id);if(error){toast(error.message);return}await this.muatKunciList();render();toast("Nama angkatan diganti: "+nm)}],
+          ["Hapus angkatan…",async()=>{if(!await konfirmasi({judul:`Hapus angkatan <em>${esc(k.angkatan)}</em>?`,pesan:"Kunci, daftar peserta, file jawaban, nilai fisik, koreksi, dan verifikasi angkatan ini dihapus permanen dari server.",
+              stat:[[n,"file jawaban"],[hit(D,k.id),"daftar peserta"],[hit(V,k.id,z=>z.final),"terverifikasi"]],catatan:"Unduh Excel dan hasil koreksi dulu bila masih perlu arsipnya.",ok:"Hapus angkatan",ketik:k.angkatan}))return;
+            const{error}=await this.sb.from("kunci").delete().eq("id",k.id);if(error){toast(error.message);return}
+            const dibuka=k.id===this.kunciId;await this.muatKunciList();if(dibuka&&this.kunciId)await this.gantiKunci(this.kunciId);VIEW="angkatan";render();toast("Angkatan "+k.angkatan+" dihapus")},"danger"]]:[])])});
+  },
+  async jadikanAktif(id){const r=await this.sb.rpc("aktifkan_kunci",{p_id:id});if(r.error){toast(r.error.message);return}await this.muatKunciList();render();toast("Angkatan ini sekarang terbuka otomatis untuk semua verifikator")},
   async simpanUnsur(){
     if(!this.admin)return;this.setSync("run");
     const berkas={};Object.keys(KJ).forEach(j=>{const m=KJ_META[j]||{};berkas[j]={k:KJ[j].map(({unsur,...r})=>r),sheet:m.sheet,notes:m.notes||[],pinjam:!!m.pinjam}});
@@ -231,13 +273,14 @@ const ONL={
 
   /* ---------- kartu kunci (pilih angkatan) ---------- */
   kartuKunci(){
-    if(this.kunciList.length<2&&!this.admin)return"";
+    if(!this.kunciList.length)return"";
     return`<div class="field" style="margin:0 0 10px"><select id="kSel" style="min-width:0;width:100%">${this.kunciList.map(k=>`<option value="${k.id}" ${k.id===this.kunciId?"selected":""}>${esc(k.angkatan)}${k.aktif?" · aktif":""}</option>`).join("")}</select></div>
-     ${this.admin&&this.kunciList.find(k=>k.id===this.kunciId&&!k.aktif)?`<button class="btn sm ghost" id="kAkt" style="margin-bottom:8px">Jadikan kunci aktif</button>`:""}`;
+     ${this.admin&&this.kunciList.find(k=>k.id===this.kunciId&&!k.aktif)?`<button class="btn sm ghost" id="kAkt" style="margin-bottom:8px">Jadikan angkatan aktif</button>`:""}<button class="btn sm ghost" id="kAng" style="margin-bottom:8px">Semua angkatan</button>`;
   },
   pasangKartu(){
     const s=document.getElementById("kSel");if(s)s.onchange=()=>this.gantiKunci(Number(s.value));
     const a=document.getElementById("kAkt");if(a)a.onclick=()=>this.jadikanAktif(this.kunciId);
+    const g=document.getElementById("kAng");if(g)g.onclick=()=>{VIEW="angkatan";render();window.scrollTo({top:0})};
   },
 
   /* ---------- tim penilai ---------- */
