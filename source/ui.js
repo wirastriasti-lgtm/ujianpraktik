@@ -346,9 +346,9 @@ function dialogKunci(m,fname){
       <h2>${nE?`Kunci <em>belum valid</em>.`:`Kunci <em>siap dipakai</em>.`}</h2>
       <p class="sub" style="font-size:13.5px;margin:0 0 14px">${esc(fname)} · ${nE?`<b style="color:var(--red)">${nE} kesalahan</b> harus diperbaiki di Excel lalu unggah ulang`:"tidak ada kesalahan format"}${nW?` · <b style="color:var(--amber)">${nW} peringatan</b> perlu dicek`:""}</p>
       ${window.ONLINE&&!nE?(()=>{const kini=ONL.angkatanKini(),saran=a?"Angkatan "+a[1].toUpperCase():"";return`<div class="mmode">
-        <label class="mopt"><input type="radio" name="mMode" value="baru" checked><span><b>Angkatan baru</b><span class="sub">Kunci ini membuka angkatan baru dengan daftar peserta, nilai, dan verifikasi sendiri. Angkatan lain tidak berubah.</span>
+        <label class="mopt"><input type="radio" name="mMode" value="baru" ${kini&&ONL.kunciKosong()?"":"checked"}><span><b>Angkatan baru</b><span class="sub">Kunci ini membuka angkatan baru dengan daftar peserta, nilai, dan verifikasi sendiri. Angkatan lain tidak berubah.</span>
           <span class="mfield" style="margin:8px 0 0">Nama angkatan<input id="mAng" value="${esc(saran)}" placeholder="mis. Kejaksaan Angkatan IV"></span></span></label>
-        ${kini?`<label class="mopt"><input type="radio" name="mMode" value="perbarui"><span><b>Perbarui kunci “${esc(kini)}”</b><span class="sub">Untuk memperbaiki kunci angkatan yang sedang dibuka. Peserta, nilai fisik, koreksi, dan verifikasi tetap; nilai daftar arsip dihitung ulang dengan kunci baru.</span></span></label>`:""}</div>`})():""}
+        ${kini?`<label class="mopt"><input type="radio" name="mMode" value="perbarui" ${ONL.kunciKosong()?"checked":""}><span><b>${ONL.kunciKosong()?`Pakai untuk “${esc(kini)}”`:`Perbarui kunci “${esc(kini)}”`}</b><span class="sub">Untuk memperbaiki kunci angkatan yang sedang dibuka. Peserta, nilai fisik, koreksi, dan verifikasi tetap; nilai daftar arsip dihitung ulang dengan kunci baru.</span></span></label>`:""}</div>`})():""}
       <div class="mjab">${Object.keys(JAB_SHEET).map(j=>{const x=m.jab[j],v=V[j];return`<div class="mj ${v.E.length?"bad":v.W.length?"warn":"ok"}">
         <div class="mjh"><b>${esc(JAB[j].label)}</b><span class="pill ${v.E.length?"bad":v.W.length?"warn":"ok"}">${v.E.length?v.E.length+" kesalahan":v.W.length?v.W.length+" peringatan":"valid"}</span></div>
         <div class="sub">sheet ${esc(x.pinjam?(x.sheetKosong||JAB_SHEET[j].label+" (tidak ada)"):x.sheet)}${x.kolom&&!x.pinjam?` · kolom terbaca: KKA ${x.kolom.kk}, indeks ${x.kolom.indeks||"–"}, uraian ${x.kolom.uraian}, jumlah ${x.kolom.jumlah||"–"}, SKKA ${x.kolom.skka||"–"}${j!=="terampil"?`, retensi ${x.kolom.aktif||"–"}/${x.kolom.inaktif||"–"}, nasib ${x.kolom.nasib||"–"}`:""}`:""}</div>
@@ -366,7 +366,7 @@ function dialogKunci(m,fname){
         if(md==="baru"&&i&&window.ONLINE&&ONL.kunciList.some(k=>k.angkatan.trim().toLowerCase()===i.value.trim().toLowerCase())){toast("Nama angkatan itu sudah ada. Pakai nama lain, atau pilih Perbarui kunci.");i.focus();return}
         tutup({mode:md,angkatan:i?i.value.trim():""})};ok.focus()
       el.querySelectorAll("[name=mMode]").forEach(r=>r.onchange=()=>{const i=el.querySelector("#mAng");if(i)i.disabled=r.value!=="baru"&&r.checked;ok.textContent=(el.querySelector("[name=mMode]:checked")||{}).value==="perbarui"?"Perbarui kunci":"Buat angkatan baru"});
-      if(window.ONLINE)ok.textContent="Buat angkatan baru"}
+      if(window.ONLINE){const md=(el.querySelector("[name=mMode]:checked")||{}).value;ok.textContent=md==="perbarui"?"Pakai kunci ini":"Buat angkatan baru";const i=el.querySelector("#mAng");if(i)i.disabled=md==="perbarui"}}
     el.onclick=e=>{if(e.target===el)tutup(null)};
   });
 }
@@ -425,8 +425,8 @@ function render(){
   :`<div class="eyebrow">${judulAngkatan()}${VIEW==="angkatan"||VIEW==="tim"?"Semua jabatan":esc(JA.label)}</div><h1 class="${compact?"sm":""}">${title}</h1><p class="lead ${compact?"sm":""}">${lead}</p>
   ${compact?"":`<div class="actions"><button class="btn" data-act="folder"><span class="plus">+</span> Muat folder jawaban</button><button class="btn" data-act="files"><span class="plus">+</span> Muat file</button><button class="btn" data-act="kunci"><span class="plus">+</span> Upload kunci jawaban</button></div>
   <div class="rule"></div>${stripProgres(hasil,JA,da)}`}`;
-  out+=`<div id="view"></div>`;
-  $("main").innerHTML=out;
+  out=(window.ONLINE?`<div id="angTop"></div>`:"")+out+`<div id="view"></div>`;
+  $("main").innerHTML=out;if(window.ONLINE)ONL.pemilihAtas();
   $("main").querySelectorAll("[data-ang]").forEach(b=>b.onclick=()=>{VIEW="angkatan";render()});
   $("main").querySelectorAll("[data-pf]").forEach(b=>b.onclick=()=>{const[vw,f]=b.dataset.pf.split(":");VIEW=vw;if(vw==="rekap")UI.filter=f;else if(vw==="detail")UI.donly=f;render()});
   $("main").querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>({folder:()=>$("fDir").click(),files:()=>$("fFiles").click(),kunci:()=>$("fKunci").click()})[b.dataset.act]());

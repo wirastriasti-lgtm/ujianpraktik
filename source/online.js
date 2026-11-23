@@ -98,10 +98,10 @@ const ONL={
     // format baru: berkas = {terampil:{k,sheet,notes,pinjam}, penyelia:{…}, muda:{…}}; format lama (array) = satu kunci untuk semua jabatan
     const b=data.berkas;
     const jab=Array.isArray(b)?Object.fromEntries(Object.keys(JAB_SHEET).map(j=>[j,{k:JSON.parse(JSON.stringify(b)),sheet:(data.sheet||"")+(j==="terampil"?"":" (sama untuk semua jabatan)"),notes:data.notes||[],pinjam:j!=="terampil"}])):b;
-    pasangKunciJab(jab);KUNCI_SRC=data.angkatan+" · "+(data.sumber||"");muatKataWajib();
+    pasangKunciJab(jab&&typeof jab==="object"?jab:{});KUNCI_SRC=data.angkatan+" · "+(data.sumber||"belum ada kunci");muatKataWajib();
   },
-  async gantiKunci(id){this.kunciId=id;try{sessionStorage.setItem("kunciDipilih",String(id))}catch(e){}
-    semua=[];FISIK={};VER={};DAFTAR=[];FSEL=null;await this.pakaiKunci();await this.muatData();this.dengar();toast("Angkatan dibuka: "+this.angkatanKini())},
+  async gantiKunci(id){this.kunciId=id;UI.dq="";try{sessionStorage.setItem("kunciDipilih",String(id))}catch(e){}
+    semua=[];FISIK={};VER={};DAFTAR=[];FSEL=null;gagal.length=0;await this.pakaiKunci();await this.muatData();this.dengar();toast("Angkatan dibuka: "+this.angkatanKini())},
   async simpanKunciBaru(m,fname,angkatan){
     if(!this.admin){toast("Hanya admin yang bisa mengunggah kunci.");return}
     if(!angkatan)return;
@@ -114,6 +114,18 @@ const ONL={
     toast("Kunci "+angkatan+" dimuat per jabatan"+(m.warn.length?" · "+m.warn.join("; "):". Cek unsur uraian tiap jabatan di halaman ini."));
   },
   angkatanKini(){const k=this.kunciList.find(x=>x.id===this.kunciId);return k?k.angkatan:""},
+  kunciKosong(){const k=this.kunciList.find(x=>x.id===this.kunciId);return!!k&&!k.sumber},
+  // angkatan baru tanpa kunci dulu: daftar peserta & kunci bisa diunggah sesudahnya; data angkatan lain tidak ikut tampil
+  async dialogAngkatanBaru(){
+    if(!this.admin){toast("Hanya admin yang bisa membuat angkatan.");return}
+    const nm=await konfirmasi({judul:"Buat <em>angkatan baru</em>",pesan:"Angkatan baru mulai kosong: belum ada peserta, nilai, atau verifikasi. Angkatan lama tetap tersimpan dan bisa dibuka lagi kapan saja.",
+      isian:{label:"Nama angkatan",placeholder:"mis. Kejaksaan Angkatan IV"},catatan:"Setelah dibuat, angkatan ini langsung jadi angkatan aktif. Lanjutkan dengan unggah kunci jawaban dan daftar peserta.",ok:"Buat angkatan",jenis:"info"});
+    if(!nm)return;
+    if(this.kunciList.some(k=>k.angkatan.trim().toLowerCase()===nm.toLowerCase())){toast("Nama angkatan itu sudah ada");return}
+    const{data,error}=await this.sb.from("kunci").insert({angkatan:nm,sumber:null,sheet:null,berkas:{},notes:[],aktif:false,updated_by:this.email}).select("id").single();
+    if(error){toast("Gagal membuat angkatan: "+error.message);return}
+    const r=await this.sb.rpc("aktifkan_kunci",{p_id:data.id});if(r.error)toast("Angkatan dibuat, tapi gagal dijadikan aktif: "+r.error.message);
+    await this.muatKunciList();await this.gantiKunci(data.id);VIEW="kunci";render();toast("Angkatan "+nm+" dibuat dan aktif — unggah kunci jawaban, lalu daftar peserta")},
   async perbaruiKunci(m,fname){
     if(!this.admin){toast("Hanya admin yang bisa mengubah kunci.");return}
     const berkas={};Object.keys(m.jab).forEach(j=>{const{cacat,sheetKosong,kolom,...x}=m.jab[j];berkas[j]={...x,k:x.k.map(k=>({...k,unsurSimpan:k.unsurSimpan||unsurBawaan(k)}))}});
@@ -131,7 +143,7 @@ const ONL={
     const hit=(arr,id,f=()=>true)=>arr.filter(x=>x.kunci_id===id&&f(x)).length;
     const tgl=t=>t?new Date(t).toLocaleDateString("id-ID",{day:"numeric",month:"short",year:"numeric"}):"–";
     v.innerHTML=`<div class="panel">
-      ${this.admin?`<div class="toolbar" style="justify-content:space-between;align-items:center"><span class="sub">Kunci yang diunggah sebagai <b>angkatan baru</b> otomatis membuka angkatan baru. Untuk memperbaiki kunci angkatan yang sedang berjalan, pilih <b>Perbarui kunci</b> saat mengunggah.</span><button class="btn pri" id="aBaru"><span class="plus">+</span> Angkatan baru</button></div>`:""}
+      ${this.admin?`<div class="toolbar" style="justify-content:space-between;align-items:center"><span class="sub">Angkatan baru mulai kosong — peserta angkatan lain tidak ikut tampil. Unggah kunci dan daftar peserta setelah angkatan dibuat.</span><button class="btn pri" id="aBaru"><span class="plus">+</span> Angkatan baru</button></div>`:""}
       <div class="tw"><table><thead><tr><th>Angkatan</th><th>File kunci</th><th class="n">Daftar peserta</th><th class="n">File masuk</th><th class="n">Fisik selesai</th><th class="n">Terverifikasi</th><th>Diubah</th><th></th></tr></thead><tbody>
       ${this.kunciList.map(k=>{const n=hit(P,k.id),per=Object.keys(JAB).map(j=>hit(P,k.id,x=>x.jabatan===j)),fs=hit(F,k.id,x=>x.selesai),vf=hit(V,k.id,x=>x.final),dp=hit(D,k.id),buka=k.id===this.kunciId;
         return`<tr${buka?' style="background:var(--line2)"':""}><td><b>${esc(k.angkatan)}</b> ${buka?'<span class="pill no">sedang dibuka</span>':""}${k.aktif?' <span class="pill ok" title="Dibuka otomatis untuk semua verifikator saat masuk">aktif</span>':""}</td>
@@ -142,7 +154,7 @@ const ONL={
           <td class="n" style="white-space:nowrap">${buka?"":`<button class="btn sm" data-buka="${k.id}">Buka</button>`} <button class="rowm" data-am="${k.id}" aria-label="Tindakan lain untuk ${esc(k.angkatan)}">⋯</button></td></tr>`}).join("")}
       </tbody></table>${this.kunciList.length?"":`<div class="empty">Belum ada angkatan. Unggah kunci jawaban untuk membuat angkatan pertama.</div>`}</div>
       <p class="sub" style="margin-top:12px">Angkatan <b>aktif</b> adalah yang terbuka otomatis saat verifikator masuk. Verifikator tetap bisa membuka angkatan lain lewat tombol Buka atau pilihan angkatan di samping.</p></div>`;
-    const b=document.getElementById("aBaru");if(b)b.onclick=()=>document.getElementById("fKunci").click();
+    const b=document.getElementById("aBaru");if(b)b.onclick=()=>this.dialogAngkatanBaru();
     v.querySelectorAll("[data-buka]").forEach(x=>x.onclick=async()=>{await this.gantiKunci(Number(x.dataset.buka));VIEW="rekap";render()});
     v.querySelectorAll("[data-am]").forEach(x=>x.onclick=e=>{e.stopPropagation();const k=this.kunciList.find(z=>z.id===Number(x.dataset.am));if(!k)return;const n=hit(P,k.id);
       menuBaris(x,[...(k.id!==this.kunciId?[["Buka angkatan ini",async()=>{await this.gantiKunci(k.id);VIEW="rekap";render()}]]:[]),
@@ -272,6 +284,10 @@ const ONL={
   },
 
   /* ---------- kartu kunci (pilih angkatan) ---------- */
+  pemilihAtas(){const t=document.getElementById("angTop");if(!t)return;
+    if(!this.kunciList.length){t.innerHTML="";return}
+    t.innerHTML=`<label class="angsel"><span>Angkatan</span><select id="angTopSel" aria-label="Pilih angkatan">${this.kunciList.map(k=>`<option value="${k.id}" ${k.id===this.kunciId?"selected":""}>${esc(k.angkatan)}${k.aktif?" · aktif":""}</option>`).join("")}</select></label>`;
+    document.getElementById("angTopSel").onchange=e=>this.gantiKunci(Number(e.target.value)).then(()=>render())},
   kartuKunci(){
     if(!this.kunciList.length)return"";
     return`<div class="field" style="margin:0 0 10px"><select id="kSel" style="min-width:0;width:100%">${this.kunciList.map(k=>`<option value="${k.id}" ${k.id===this.kunciId?"selected":""}>${esc(k.angkatan)}${k.aktif?" · aktif":""}</option>`).join("")}</select></div>
