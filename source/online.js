@@ -86,7 +86,7 @@ const ONL={
     const{data,error}=await this.sb.from("kunci").select("id,angkatan,sumber,sheet,aktif,updated_at").order("id",{ascending:false});
     if(error){toast("Gagal memuat kunci: "+error.message);return}
     this.kunciList=data||[];
-    let pilih=null;try{pilih=Number(localStorage.getItem("kunciDipilih"))}catch(e){}
+    let pilih=null;try{pilih=Number(sessionStorage.getItem("kunciDipilih"))}catch(e){}
     const ada=this.kunciList.find(k=>k.id===pilih)||this.kunciList.find(k=>k.aktif)||this.kunciList[0];
     this.kunciId=ada?ada.id:null;
     await this.pakaiKunci();
@@ -100,7 +100,7 @@ const ONL={
     const jab=Array.isArray(b)?Object.fromEntries(Object.keys(JAB_SHEET).map(j=>[j,{k:JSON.parse(JSON.stringify(b)),sheet:(data.sheet||"")+(j==="terampil"?"":" (sama untuk semua jabatan)"),notes:data.notes||[],pinjam:j!=="terampil"}])):b;
     pasangKunciJab(jab);KUNCI_SRC=data.angkatan+" · "+(data.sumber||"");muatKataWajib();
   },
-  async gantiKunci(id){this.kunciId=id;try{localStorage.setItem("kunciDipilih",String(id))}catch(e){}
+  async gantiKunci(id){this.kunciId=id;try{sessionStorage.setItem("kunciDipilih",String(id))}catch(e){}
     semua=[];FISIK={};VER={};DAFTAR=[];FSEL=null;await this.pakaiKunci();await this.muatData();this.dengar();toast("Angkatan dibuka: "+this.angkatanKini())},
   async simpanKunciBaru(m,fname,angkatan){
     if(!this.admin){toast("Hanya admin yang bisa mengunggah kunci.");return}
